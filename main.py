@@ -1,6 +1,8 @@
 import pysam
 from Bio import SeqIO
 from collections import defaultdict
+import logging
+
 
 def getProviralFastaIDs(fafile):
   ids = []
@@ -48,7 +50,7 @@ def parseCellrangerBam(bamfile, proviralFastaIds, proviralReads, hostReadsWithPo
       proviralReads[read.qname].append(read)
 
     # read or mate must be mapped AND either read or its mate must be proviral
-    elif (not read.flag & 14) and (read.reference_name in proviralFastaIds or read.next_reference_name in proviralFastaIds):
+    elif (not read.flag & 14) and (refnameIsProviral or nextRefnameIsProviral):
       # move to chimera identification
       unmappedPotentialChimera[read.qname].append(read)
     
@@ -59,25 +61,56 @@ def parseCellrangerBam(bamfile, proviralFastaIds, proviralReads, hostReadsWithPo
   return bam
 
 
+def writeBam(fn, templateBam, reads):
+  outputBam = pysam.AlignmentFile(fn, "wb", template = templateBam)
+
+  for qname in reads:
+    for read in reads[qname]:
+      outputBam.write(read)
+
 
 def main():
+  # initial fn arguments
+  # TODO parameterize these into cmd line arguments
   fnArgs = {
     "cellranger_ns_bam": "hello",
     "bwa_proviral_fa": "hello",
     "bwa_host_fa": "hello"
   }
 
+  # output filenames
+  outputFNs = {
+    "proviralReads": "proviralReads.bam",
+    "hostWithPotentialChimera": "hostWithPotentialChimera.bam",
+    "umappedWithPotentialChimera": "unmappedWithPotentialChimera.bam"
+  }
+
+  # set up initial dictionaries
   dualProviralAlignedReads = defaultdict(list)
   hostReadsWithPotentialChimera = defaultdict(list)
   unmappedPotentialChimera = defaultdict(list)
 
+  # set up logger
+  logging.basicConfig(filename='haystack.log', encoding='utf-8', level=logging.DEBUG)
+
+  # recover all proviral "chromosome" names from partial fasta file used by Cellranger
+  logging.info("Getting proviral records")
   proviralFastaIds = getProviralFastaIDs(fnArgs["bwa_proviral_fa"])
+
+  # parse BAM file
+  logging.info("Parsing cellranger BAM (namesorted)")
   cellrangerBam = parseCellrangerBam(fnArgs["cellranger_ns_bam"],
     proviralFastaIds = proviralFastaIds,
     proviralReads = dualProviralAlignedReads,
     hostReadsWithPotentialChimera = hostReadsWithPotentialChimera,
     unmappedPotentialChimera = unmappedPotentialChimera,
     top_n = -1) #debugging
+
+  # output BAM files
+  logging.info("Writing out BAM files of parsed records")
+  writeBam(outputFNs["proviralReads"], cellrangerBam, dualProviralAlignedReads)
+  writeBam(outputFNs["hostWithPotentialChimera"], cellrangerBam, hostReadsWithPotentialChimera)
+  writeBam(outputFNs["umappedWithPotentialChimera"], cellrangerBam, unmappedPotentialChimera)
 
 
 if __name__ == '__main__':
