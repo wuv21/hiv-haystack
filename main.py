@@ -2,11 +2,13 @@ import pysam
 from Bio import SeqIO
 from collections import defaultdict
 import logging
+import argparse
+import os
 
 
 def getProviralFastaIDs(fafile):
   ids = []
-  for record in SeqIO.parse(fafile):
+  for record in SeqIO.parse(fafile, format = "fasta"):
     ids.append(record.id)
 
   return ids
@@ -25,7 +27,7 @@ def extractCellBarcode(read):
 
 
 def parseCellrangerBam(bamfile, proviralFastaIds, proviralReads, hostReadsWithPotentialChimera, unmappedPotentialChimera, top_n = -1):
-  bam = pysam.AlignmentFile(bamfile, "rb", threads = 10)
+  bam = pysam.AlignmentFile(bamfile, "rb", threads = 20)
 
   readIndex = 0
   for read in bam:
@@ -55,6 +57,10 @@ def parseCellrangerBam(bamfile, proviralFastaIds, proviralReads, hostReadsWithPo
       unmappedPotentialChimera[read.qname].append(read)
     
     readIndex += 1
+    
+    if readIndex % 1000000 == 0:
+      logging.info("Parsed %s reads", str(readIndex))
+
     if top_n != -1 and readIndex > top_n:
       return
     
@@ -69,15 +75,10 @@ def writeBam(fn, templateBam, reads):
       outputBam.write(read)
 
 
-def main():
+def main(args):
   # initial fn arguments
   # TODO parameterize these into cmd line arguments
-  fnArgs = {
-    "cellranger_ns_bam": "hello",
-    "bwa_proviral_fa": "hello",
-    "bwa_host_fa": "hello"
-  }
-
+  
   # output filenames
   outputFNs = {
     "proviralReads": "proviralReads.bam",
@@ -95,23 +96,47 @@ def main():
 
   # recover all proviral "chromosome" names from partial fasta file used by Cellranger
   logging.info("Getting proviral records")
-  proviralFastaIds = getProviralFastaIDs(fnArgs["bwa_proviral_fa"])
+  proviralFastaIds = getProviralFastaIDs(args.viralFasta)
 
   # parse BAM file
   logging.info("Parsing cellranger BAM (namesorted)")
-  cellrangerBam = parseCellrangerBam(fnArgs["cellranger_ns_bam"],
+  parseCellrangerBam(bamfile = args.bamfile,
     proviralFastaIds = proviralFastaIds,
     proviralReads = dualProviralAlignedReads,
     hostReadsWithPotentialChimera = hostReadsWithPotentialChimera,
     unmappedPotentialChimera = unmappedPotentialChimera,
-    top_n = -1) #debugging
+    top_n = args.topNReads) #debugging
 
   # output BAM files
   logging.info("Writing out BAM files of parsed records")
-  writeBam(outputFNs["proviralReads"], cellrangerBam, dualProviralAlignedReads)
-  writeBam(outputFNs["hostWithPotentialChimera"], cellrangerBam, hostReadsWithPotentialChimera)
-  writeBam(outputFNs["umappedWithPotentialChimera"], cellrangerBam, unmappedPotentialChimera)
 
+  cellrangerBam = pysam.AlignmentFile(args.bamfile, "rb")
+  writeBam(args.outputDir + "/" + outputFNs["proviralReads"], cellrangerBam, dualProviralAlignedReads)
+  writeBam(args.outputDir + "/" + outputFNs["hostWithPotentialChimera"], cellrangerBam, hostReadsWithPotentialChimera)
+  writeBam(args.outputDir + "/" +  outputFNs["umappedWithPotentialChimera"], cellrangerBam, unmappedPotentialChimera)
+  cellrangerBam.close()
 
 if __name__ == '__main__':
-  main()
+  # set up command line arguments
+  parser = argparse.ArgumentParser(
+    description = "Identify HIV-associated reads amidst cellular scATAC reads")
+
+  parser.add_argument("--bamfile",
+    required = True,
+    help = "Name sorted Cellranger BAM file")
+  parser.add_argument("--outputDir",
+    required = True,
+    help = "Output bam files")
+  parser.add_argument("--viralFasta",
+    required = True,
+    help = "Viral fasta file (can have multiple sequences in single file)")
+  parser.add_argument("--topNReads",
+    default = -1,
+    type = int,
+    help = "Limit to n number of records in BAM file. Default is all (-1)")
+  args = parser.parse_args()
+
+  if not os.path.exists(args.outputDir):
+    os.makedirs(args.outputDir)
+
+  main(args)
