@@ -6,6 +6,7 @@ import logging
 import argparse
 import os
 import csv
+import re
 from pprint import pprint
 
 def getProviralFastaIDs(fafile, recordSeqs):
@@ -89,17 +90,40 @@ def getSoftClip(read, clipMinLen):
   return clippedFrag
 
 
-def isSoftClipProviral(read, clipMinLen = 11, proviralLTRSeqs):
+def isSoftClipProviral(read, proviralLTRSeqs, clipMinLen = 11):
   clippedFrag = getSoftClip(read, clipMinLen)
   
   if len(clippedFrag) == 0:
     return False
 
-  # TODO here...
-  # 
+  hits = {"plus": [], "plusIds": [], "minus" : [], "minusIds": []}
+  for key in proviralLTRSeqs:
+    keyPair = proviralLTRSeqs[key]
+
+    for ltrType in keyPair:
+      orient = ""
+      if ltrType == "5p" or ltrType == "3p":
+        orient = "plus"
+      else:
+        orient = "minus"
+
+      # find hits...
+      ltrTypeSeqs = keyPair[ltrType]
+      for s in ltrTypeSeqs:
+        hits = [x.start() for x in re.finditer(clippedFrag, s)]
+        if len(hits) > 0:
+          hits[orient].append(hits)
+          hits[orient + "Ids"].append(key)
+
+    # check hits
+    pprint(hits)
   
   return
 
+
+def parseHostReadsWithPotentialChimera(reads, clipMinLen):
+  for r in reads:
+    isSoftClipProviral(r, clipMinLen)
 
 
 
@@ -115,6 +139,8 @@ def parseCellrangerBam(bamfile, proviralFastaIds, proviralReads, hostReadsWithPo
     cigarString = read.cigartuples
     # 4 is soft clip
     hasSoftClipAtEnd = cigarString[-1][0] == 4 or cigarString[0][0] == 4
+    softClipInitThresh = 7
+    softClipIsLongEnough = cigarString[-1][1] >= softClipInitThresh or cigarString[0][1] >= softClipInitThresh
 
     # ignore if optical/PCR duplicate OR without a mate
     if (read.flag & 1024) or (not read.flag & 1):
@@ -123,7 +149,7 @@ def parseCellrangerBam(bamfile, proviralFastaIds, proviralReads, hostReadsWithPo
     
     # if read is properly mapped in a pair AND not proviral aligned AND there is soft clipping involved
     # TODO add only if S number is > than settings
-    elif (read.flag & 2) and (not refnameIsProviral) and (hasSoftClipAtEnd):
+    elif (read.flag & 2) and (not refnameIsProviral) and (hasSoftClipAtEnd and softClipIsLongEnough):
       # move to chimera identification
       hostReadsWithPotentialChimera[read.qname].append(read)
     
@@ -183,8 +209,6 @@ def main(args):
   potentialLTR = parseLTRMatches(args.LTRmatches, proviralSeqs)
   pprint(dict(potentialLTR))
 
-  return
-
   # parse BAM file
   logging.info("Parsing cellranger BAM (namesorted)")
   parseCellrangerBam(bamfile = args.bamfile,
@@ -202,6 +226,9 @@ def main(args):
   writeBam(args.outputDir + "/" + outputFNs["hostWithPotentialChimera"], cellrangerBam, hostReadsWithPotentialChimera)
   writeBam(args.outputDir + "/" +  outputFNs["umappedWithPotentialChimera"], cellrangerBam, unmappedPotentialChimera)
   cellrangerBam.close()
+
+  # parse host reads with potential chimera
+  parseHostReadsWithPotentialChimera(hostReadsWithPotentialChimera, clipMinLen == args.LTRClipLen)
 
 
 if __name__ == '__main__':
@@ -222,16 +249,13 @@ if __name__ == '__main__':
     default = -1,
     type = int,
     help = "Limit to n number of records in BAM file. Default is all (-1)")
-<<<<<<< HEAD
   parser.add_argument("--LTRmatches",
     required = True,
     help = "blastn table output format for LTR matches to HXB2 LTR")
-=======
   parser.add_argument("--LTRClipLen",
     default = 11,
     type = int,
     help = "Number of bp to extend into LTR from a chimeric fragment")
->>>>>>> a645806 (fix(cleaned up code + refactored a little))
   args = parser.parse_args()
 
   if not os.path.exists(args.outputDir):
