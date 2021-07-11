@@ -1,15 +1,18 @@
 import pysam
 from Bio import SeqIO
+from Bio.Seq import Seq
 from collections import defaultdict
 import logging
 import argparse
 import os
+import csv
+from pprint import pprint
 
-
-def getProviralFastaIDs(fafile):
+def getProviralFastaIDs(fafile, recordSeqs):
   ids = []
   for record in SeqIO.parse(fafile, format = "fasta"):
     ids.append(record.id)
+    recordSeqs[record.id].append(record.seq)
 
   return ids
 
@@ -24,6 +27,80 @@ def extractCellBarcode(read):
         barcode = "None"
 
     return barcode
+
+
+def getLTRseq(seq, start, end):
+  ltrSeq = seq[start - 1:end]
+  return ltrSeq
+
+
+def parseLTRMatches(LTRmatchesFN, proviralSeqs, endBuffer = 20):
+  LTRdict = defaultdict(lambda: {"5p": [], "5pRevComp": [], "3p": [], "3pRevComp":[]})
+
+  with open(LTRmatchesFN, "r") as fhandle:
+    rd = csv.reader(fhandle, delimiter = "\t")
+
+    for row in rd:
+      # index 1 = subject ID (i.e. the original sample's viral fasta ID)
+      # index 2 = percent match
+      # index 6 = query start
+      # index 7 = query end
+      # index 8 = subject start
+      # index 9 = subject end
+      
+      print(row)
+
+      subjID = row[1]
+      # qstart = row[6]
+      # qend = row[7]
+      sstart = int(row[8])
+      send = int(row[9])
+      slen = len(proviralSeqs[subjID][0])
+      
+      print(subjID, sstart, send)
+
+      if sstart < endBuffer:
+        seq = getLTRseq(proviralSeqs[subjID][0], 1, send)
+        LTRdict[subjID]["5p"].append(seq)
+        LTRdict[subjID]["5pRevComp"].append(seq.reverse_complement())
+      elif slen - send < endBuffer:
+        seq = getLTRseq(proviralSeqs[subjID][0], sstart, slen)
+        LTRdict[subjID]["3p"].append(seq)
+        LTRdict[subjID]["3pRevComp"].append(seq.reverse_complement())
+
+  return LTRdict
+
+
+def getSoftClip(read, clipMinLen):
+  # cutoff same as epiVIA
+  cigar = read.cigartuples
+  clippedFrag = ""
+
+  # clip is at 5' position
+  if cigar[0][0] == 4 and cigar[0][1] >= clipMinLen:
+    clipLen = cigar[0][1]
+    clippedFrag = read.seq[0:clipLen]
+  
+  # clip at 3' position
+  elif cigar[-1][0] == 4 and cigar[-1][0] >= clipMinLen:
+    clipLen = cigar[-1][1]
+    clippedFrag = read.seq[(cigar[-1][1]*-1): ]
+
+  return clippedFrag
+
+
+def isSoftClipProviral(read, clipMinLen = 11, proviralLTRSeqs):
+  clippedFrag = getSoftClip(read, clipMinLen)
+  
+  if len(clippedFrag) == 0:
+    return False
+
+  # TODO here...
+  # 
+  
+  return
+
+
 
 
 def parseCellrangerBam(bamfile, proviralFastaIds, proviralReads, hostReadsWithPotentialChimera, unmappedPotentialChimera, top_n = -1):
@@ -76,9 +153,6 @@ def writeBam(fn, templateBam, reads):
 
 
 def main(args):
-  # initial fn arguments
-  # TODO parameterize these into cmd line arguments
-  
   # output filenames
   outputFNs = {
     "proviralReads": "proviralReads.bam",
@@ -96,7 +170,16 @@ def main(args):
 
   # recover all proviral "chromosome" names from partial fasta file used by Cellranger
   logging.info("Getting proviral records")
-  proviralFastaIds = getProviralFastaIDs(args.viralFasta)
+  proviralSeqs = defaultdict(lambda: [])
+  proviralFastaIds = getProviralFastaIDs(args.viralFasta, proviralSeqs)
+
+  # get possible LTR regions from fasta file
+  # TODO build into program (as opposed to running it before)
+  logging.info("Getting potential LTRs")
+  potentialLTR = parseLTRMatches(args.LTRmatches, proviralSeqs)
+  pprint(dict(potentialLTR))
+
+  return
 
   # parse BAM file
   logging.info("Parsing cellranger BAM (namesorted)")
@@ -134,6 +217,9 @@ if __name__ == '__main__':
     default = -1,
     type = int,
     help = "Limit to n number of records in BAM file. Default is all (-1)")
+  parser.add_argument("--LTRmatches",
+    required = True,
+    help = "blastn table output format for LTR matches to HXB2 LTR")
   args = parser.parse_args()
 
   if not os.path.exists(args.outputDir):
