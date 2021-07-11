@@ -49,8 +49,6 @@ def parseLTRMatches(LTRmatchesFN, proviralSeqs, endBuffer = 20):
       # index 8 = subject start
       # index 9 = subject end
       
-      print(row)
-
       subjID = row[1]
       # qstart = row[6]
       # qend = row[7]
@@ -58,8 +56,6 @@ def parseLTRMatches(LTRmatchesFN, proviralSeqs, endBuffer = 20):
       send = int(row[9])
       slen = len(proviralSeqs[subjID][0])
       
-      print(subjID, sstart, send)
-
       if sstart < endBuffer:
         seq = getLTRseq(proviralSeqs[subjID][0], 1, send)
         LTRdict[subjID]["5p"].append(seq)
@@ -75,19 +71,28 @@ def parseLTRMatches(LTRmatchesFN, proviralSeqs, endBuffer = 20):
 def getSoftClip(read, clipMinLen):
   # cutoff same as epiVIA
   cigar = read.cigartuples
-  clippedFrag = ""
+  clippedFrag = Seq("")
+
+  clip5Present = False
+  clip3Present = False
 
   # clip is at 5' position
   if cigar[0][0] == 4 and cigar[0][1] >= clipMinLen:
     clipLen = cigar[0][1]
     clippedFrag = read.seq[0:clipLen]
-  
+    clip5Present = True
+
   # clip at 3' position
-  elif cigar[-1][0] == 4 and cigar[-1][0] >= clipMinLen:
+  if cigar[-1][0] == 4 and cigar[-1][1] >= clipMinLen:
     clipLen = cigar[-1][1]
     clippedFrag = read.seq[(cigar[-1][1]*-1): ]
+    clip3Present = True
 
-  return clippedFrag
+  # clip can only be present at one end
+  if clip5Present and clip3Present:
+    return Seq("")
+  else:
+    return clippedFrag
 
 
 def isSoftClipProviral(read, proviralLTRSeqs, clipMinLen = 11):
@@ -95,8 +100,15 @@ def isSoftClipProviral(read, proviralLTRSeqs, clipMinLen = 11):
   
   if len(clippedFrag) == 0:
     return False
+  
+  strClippedFrag = str(clippedFrag)
 
+  # skip if there are any characters other than ATGC 
+  if bool(re.compile(r'[^ATGC]').search(strClippedFrag)):
+    return False
+  
   hits = {"plus": [], "plusIds": [], "minus" : [], "minusIds": []}
+  foundHit = False
   for key in proviralLTRSeqs:
     keyPair = proviralLTRSeqs[key]
 
@@ -110,21 +122,28 @@ def isSoftClipProviral(read, proviralLTRSeqs, clipMinLen = 11):
       # find hits...
       ltrTypeSeqs = keyPair[ltrType]
       for s in ltrTypeSeqs:
-        hits = [x.start() for x in re.finditer(clippedFrag, s)]
-        if len(hits) > 0:
-          hits[orient].append(hits)
+        matches = [x.start() for x in re.finditer(strClippedFrag, str(s))]
+        if len(matches) > 0:
+          hits[orient].append(matches)
           hits[orient + "Ids"].append(key)
+          foundHit = True
 
-    # check hits
-    pprint(hits)
-  
-  return
+  # TODO check hits
+  # can only be plus orientation OR minus orientation only
+  if foundHit and len(hits["plus"]) != 0 and len(hits["minus"]) == 0:
+    return hits
+  elif foundHit and len(hits["minus"]) != 0 and len(hits["plus"]) == 0:
+    return hits
+  else:
+    return False
 
 
-def parseHostReadsWithPotentialChimera(reads, clipMinLen):
-  for r in reads:
-    isSoftClipProviral(r, clipMinLen)
-
+def parseHostReadsWithPotentialChimera(reads, proviralLTRSeqs, clipMinLen):
+  for read in reads:
+    hits = isSoftClipProviral(read, proviralLTRSeqs, clipMinLen)
+    if hits and len(hits) != 0:
+      print(hits)
+      print(read)
 
 
 def parseCellrangerBam(bamfile, proviralFastaIds, proviralReads, hostReadsWithPotentialChimera, unmappedPotentialChimera, top_n = -1):
@@ -138,9 +157,9 @@ def parseCellrangerBam(bamfile, proviralFastaIds, proviralReads, hostReadsWithPo
     
     cigarString = read.cigartuples
     # 4 is soft clip
-    hasSoftClipAtEnd = cigarString[-1][0] == 4 or cigarString[0][0] == 4
+    hasSoftClipAtEnd = cigarString != None and (cigarString[-1][0] == 4 or cigarString[0][0] == 4)
     softClipInitThresh = 7
-    softClipIsLongEnough = cigarString[-1][1] >= softClipInitThresh or cigarString[0][1] >= softClipInitThresh
+    softClipIsLongEnough = cigarString != None and (cigarString[-1][1] >= softClipInitThresh or cigarString[0][1] >= softClipInitThresh)
 
     # ignore if optical/PCR duplicate OR without a mate
     if (read.flag & 1024) or (not read.flag & 1):
@@ -148,10 +167,9 @@ def parseCellrangerBam(bamfile, proviralFastaIds, proviralReads, hostReadsWithPo
       continue
     
     # if read is properly mapped in a pair AND not proviral aligned AND there is soft clipping involved
-    # TODO add only if S number is > than settings
     elif (read.flag & 2) and (not refnameIsProviral) and (hasSoftClipAtEnd and softClipIsLongEnough):
       # move to chimera identification
-      hostReadsWithPotentialChimera[read.qname].append(read)
+      hostReadsWithPotentialChimera.append(read)
     
     # if there is a mate AND both are proviral only 
     elif refnameIsProviral and nextRefnameIsProviral:
@@ -176,10 +194,14 @@ def parseCellrangerBam(bamfile, proviralFastaIds, proviralReads, hostReadsWithPo
 
 def writeBam(fn, templateBam, reads):
   outputBam = pysam.AlignmentFile(fn, "wb", template = templateBam)
-
-  for qname in reads:
-    for read in reads[qname]:
+  
+  if isinstance(reads, list):
+    for read in reads:
       outputBam.write(read)
+  else:
+    for qname in reads:
+      for read in reads[qname]:
+        outputBam.write(read)
 
 
 def main(args):
@@ -192,7 +214,7 @@ def main(args):
 
   # set up initial dictionaries
   dualProviralAlignedReads = defaultdict(list)
-  hostReadsWithPotentialChimera = defaultdict(list)
+  hostReadsWithPotentialChimera = []
   unmappedPotentialChimera = defaultdict(list)
 
   # set up logger
@@ -207,7 +229,6 @@ def main(args):
   # TODO build into program (as opposed to running it before)
   logging.info("Getting potential LTRs")
   potentialLTR = parseLTRMatches(args.LTRmatches, proviralSeqs)
-  pprint(dict(potentialLTR))
 
   # parse BAM file
   logging.info("Parsing cellranger BAM (namesorted)")
@@ -228,7 +249,7 @@ def main(args):
   cellrangerBam.close()
 
   # parse host reads with potential chimera
-  parseHostReadsWithPotentialChimera(hostReadsWithPotentialChimera, clipMinLen == args.LTRClipLen)
+  parseHostReadsWithPotentialChimera(hostReadsWithPotentialChimera, potentialLTR, clipMinLen = args.LTRClipLen)
 
 
 if __name__ == '__main__':
