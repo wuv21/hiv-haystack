@@ -18,15 +18,15 @@ def getProviralFastaIDs(fafile, recordSeqs):
 
 
 def extractCellBarcode(read):
-    tags = dict(read.tags)
+  # accept only CB tag because it passes the allowlist set by 10X
+  tags = dict(read.tags)
+  
+  if "CB" in tags:
+      barcode = tags["CB"]
+  else:
+      barcode = "None"
 
-    # accept only CB tag because it passes the allowlist set by 10X
-    if "CB" in tags:
-        barcode = tags["CB"]
-    else:
-        barcode = "None"
-
-    return barcode
+  return barcode
 
 
 def getLTRseq(seq, start, end):
@@ -111,6 +111,10 @@ def parseCellrangerBam(bamfile, proviralFastaIds, proviralReads, hostReadsWithPo
     refnameIsProviral = read.reference_name in proviralFastaIds
     # supposed to take mate's ref name or if no mate, the next record in BAM file
     nextRefnameIsProviral = read.next_reference_name in proviralFastaIds
+    
+    cigarString = read.cigartuples
+    # 4 is soft clip
+    hasSoftClipAtEnd = cigarString[-1][0] == 4 or cigarString[0][0] == 4
 
     # ignore if optical/PCR duplicate OR without a mate
     if (read.flag & 1024) or (not read.flag & 1):
@@ -119,7 +123,7 @@ def parseCellrangerBam(bamfile, proviralFastaIds, proviralReads, hostReadsWithPo
     
     # if read is properly mapped in a pair AND not proviral aligned AND there is soft clipping involved
     # TODO add only if S number is > than settings
-    elif (read.flag & 2) and (not refnameIsProviral) and ("S" in read.cigarstring):
+    elif (read.flag & 2) and (not refnameIsProviral) and (hasSoftClipAtEnd):
       # move to chimera identification
       hostReadsWithPotentialChimera[read.qname].append(read)
     
@@ -199,6 +203,7 @@ def main(args):
   writeBam(args.outputDir + "/" +  outputFNs["umappedWithPotentialChimera"], cellrangerBam, unmappedPotentialChimera)
   cellrangerBam.close()
 
+
 if __name__ == '__main__':
   # set up command line arguments
   parser = argparse.ArgumentParser(
@@ -217,9 +222,16 @@ if __name__ == '__main__':
     default = -1,
     type = int,
     help = "Limit to n number of records in BAM file. Default is all (-1)")
+<<<<<<< HEAD
   parser.add_argument("--LTRmatches",
     required = True,
     help = "blastn table output format for LTR matches to HXB2 LTR")
+=======
+  parser.add_argument("--LTRClipLen",
+    default = 11,
+    type = int,
+    help = "Number of bp to extend into LTR from a chimeric fragment")
+>>>>>>> a645806 (fix(cleaned up code + refactored a little))
   args = parser.parse_args()
 
   if not os.path.exists(args.outputDir):
