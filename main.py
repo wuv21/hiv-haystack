@@ -2,7 +2,6 @@ import pysam
 from Bio import SeqIO
 from Bio.Seq import Seq
 from collections import defaultdict
-import logging
 import argparse
 import os
 import csv
@@ -78,6 +77,15 @@ def getSoftClip(read, clipMinLen):
 
   clip5Present = False
   clip3Present = False
+
+  # loop through cigar to make sure there's only 1 soft clip
+  softClipCount = 0
+  for c in cigar:
+    if c[0] == 4:
+      softClipCount += 1
+
+  if softClipCount > 1:
+    return Seq("")
 
   # clip is at 5' position
   if cigar[0][0] == 4 and cigar[0][1] >= clipMinLen:
@@ -224,6 +232,23 @@ def writeBam(fn, templateBam, reads):
         outputBam.write(read)
 
 
+def importProcessedBam(bamfile, returnDict = True):
+  bam = pysam.AlignmentFile(bamfile, "rb", threads = 20)
+
+  if returnDict:
+    val = defaultdict(list)
+  else:
+    val = []
+
+  for read in bam:
+    if returnDict:
+      val[read.qname].append(read)
+    else:
+      val.append(read)
+
+  return val
+
+
 def main(args):
   # output filenames
   outputFNs = {
@@ -248,22 +273,32 @@ def main(args):
   print("Getting potential LTRs")
   potentialLTR = parseLTRMatches(args.LTRmatches, proviralSeqs)
   
-  # parse BAM file
-  print("Parsing cellranger BAM (namesorted)")
-  parseCellrangerBam(bamfile = args.bamfile,
-    proviralFastaIds = proviralFastaIds,
-    proviralReads = dualProviralAlignedReads,
-    hostReadsWithPotentialChimera = hostReadsWithPotentialChimera,
-    unmappedPotentialChimera = unmappedPotentialChimera,
-    top_n = args.topNReads) #debugging
+  if not os.path.exists(args.outputDir + "/" + outputFNs["proviralReads"]):
+    # parse BAM file
+    print("Parsing cellranger BAM (namesorted)")
+    parseCellrangerBam(bamfile = args.bamfile,
+      proviralFastaIds = proviralFastaIds,
+      proviralReads = dualProviralAlignedReads,
+      hostReadsWithPotentialChimera = hostReadsWithPotentialChimera,
+      unmappedPotentialChimera = unmappedPotentialChimera,
+      top_n = args.topNReads) #debugging
 
-  # output BAM files
-  print("Writing out BAM files of parsed records")
+    # output BAM files
+    print("Writing out BAM files of parsed records")
 
-  cellrangerBam = pysam.AlignmentFile(args.bamfile, "rb")
-  writeBam(args.outputDir + "/" + outputFNs["proviralReads"], cellrangerBam, dualProviralAlignedReads)
-  writeBam(args.outputDir + "/" + outputFNs["hostWithPotentialChimera"], cellrangerBam, hostReadsWithPotentialChimera)
-  writeBam(args.outputDir + "/" +  outputFNs["umappedWithPotentialChimera"], cellrangerBam, unmappedPotentialChimera)
+    cellrangerBam = pysam.AlignmentFile(args.bamfile, "rb")
+    writeBam(args.outputDir + "/" + outputFNs["proviralReads"], cellrangerBam, dualProviralAlignedReads)
+    writeBam(args.outputDir + "/" + outputFNs["hostWithPotentialChimera"], cellrangerBam, hostReadsWithPotentialChimera)
+    writeBam(args.outputDir + "/" +  outputFNs["umappedWithPotentialChimera"], cellrangerBam, unmappedPotentialChimera)
+    cellrangerBam.close()
+
+  else:
+    print("Parsed BAM files already found. Importing these files to save time.")
+    
+    # import files...
+    dualProviralAlignedReads = importProcessedBam(args.outputDir + "/" + outputFNs["proviralReads"], returnDict = True)
+    hostReadsWithPotentialChimera = importProcessedBam(args.outputDir + "/" + outputFNs["hostWithPotentialChimera"], returnDict = False)
+    unmappedPotentialChimera = importProcessedBam(args.outputDir + "/" +  outputFNs["umappedWithPotentialChimera"], returnDict = True)
 
   # parse host reads with potential chimera
   print("Finding valid chimeras from host reads")
@@ -271,6 +306,7 @@ def main(args):
     potentialLTR,
     clipMinLen = args.LTRClipLen)
   
+  cellrangerBam = pysam.AlignmentFile(args.bamfile, "rb")
   writeBam(args.outputDir + "/" + outputFNs["hostWithValidChimera"], cellrangerBam, hostValidChimeras["validReads"])
   print(hostValidChimeras["validHits"])
   cellrangerBam.close()
