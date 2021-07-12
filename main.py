@@ -56,7 +56,10 @@ def parseLTRMatches(LTRmatchesFN, proviralSeqs, endBuffer = 20):
       send = int(row[9])
       slen = len(proviralSeqs[subjID][0])
       
-      if sstart < endBuffer:
+      # must be at least 550bp long
+      if abs(send - sstart) < 550:
+        continue
+      elif sstart < endBuffer:
         seq = getLTRseq(proviralSeqs[subjID][0], 1, send)
         LTRdict[subjID]["5p"].append(seq)
         LTRdict[subjID]["5pRevComp"].append(seq.reverse_complement())
@@ -121,14 +124,21 @@ def isSoftClipProviral(read, proviralLTRSeqs, clipMinLen = 11):
 
       # find hits...
       ltrTypeSeqs = keyPair[ltrType]
+      
+      if len(ltrTypeSeqs) == 0:
+        continue
+
+      endBuffer = 3
       for s in ltrTypeSeqs:
         matches = [x.start() for x in re.finditer(strClippedFrag, str(s))]
-        if len(matches) > 0:
-          hits[orient].append(matches)
-          hits[orient + "Ids"].append(key)
-          foundHit = True
+        if len(matches) > 0:     
 
-  # TODO check hits
+          # allow only if within 3bp of LTR end
+          if min(matches) <= endBuffer or max(matches) + len(strClippedFrag) >= len(str(s)) - endBuffer:
+            hits[orient].append(matches)
+            hits[orient + "Ids"].append(key + "___" + ltrType)
+            foundHit = True
+
   # can only be plus orientation OR minus orientation only
   if foundHit and len(hits["plus"]) != 0 and len(hits["minus"]) == 0:
     return hits
@@ -139,11 +149,21 @@ def isSoftClipProviral(read, proviralLTRSeqs, clipMinLen = 11):
 
 
 def parseHostReadsWithPotentialChimera(reads, proviralLTRSeqs, clipMinLen):
+  validHits = []
+  validReads = []
+
   for read in reads:
-    hits = isSoftClipProviral(read, proviralLTRSeqs, clipMinLen)
-    if hits and len(hits) != 0:
-      print(hits)
-      print(read)
+    potentialHits = isSoftClipProviral(read, proviralLTRSeqs, clipMinLen)
+    
+    if potentialHits and len(potentialHits['plus']) != 0:
+      validHits.append(potentialHits)
+      validReads.append(read)
+    elif potentialHits and len(potentialHits['minus']) != 0:
+      validHits.append(potentialHits)
+      validReads.append(read)
+
+  returnVal = {"validHits": validHits, "validReads": validReads}
+  return returnVal
 
 
 def parseCellrangerBam(bamfile, proviralFastaIds, proviralReads, hostReadsWithPotentialChimera, unmappedPotentialChimera, top_n = -1):
@@ -184,7 +204,7 @@ def parseCellrangerBam(bamfile, proviralFastaIds, proviralReads, hostReadsWithPo
     readIndex += 1
     
     if readIndex % 1000000 == 0:
-      logging.info("Parsed %s reads", str(readIndex))
+      print("Parsed {} reads".format(str(readIndex)))
 
     if top_n != -1 and readIndex > top_n:
       return
@@ -209,29 +229,27 @@ def main(args):
   outputFNs = {
     "proviralReads": "proviralReads.bam",
     "hostWithPotentialChimera": "hostWithPotentialChimera.bam",
-    "umappedWithPotentialChimera": "unmappedWithPotentialChimera.bam"
+    "umappedWithPotentialChimera": "unmappedWithPotentialChimera.bam",
+    "hostWithValidChimera": "hostWithValidChimera.bam"
   }
-
+  
   # set up initial dictionaries
   dualProviralAlignedReads = defaultdict(list)
   hostReadsWithPotentialChimera = []
   unmappedPotentialChimera = defaultdict(list)
 
-  # set up logger
-  logging.basicConfig(filename='haystack.log', encoding='utf-8', level=logging.DEBUG)
-
   # recover all proviral "chromosome" names from partial fasta file used by Cellranger
-  logging.info("Getting proviral records")
+  print("Getting proviral records")
   proviralSeqs = defaultdict(lambda: [])
   proviralFastaIds = getProviralFastaIDs(args.viralFasta, proviralSeqs)
 
   # get possible LTR regions from fasta file
   # TODO build into program (as opposed to running it before)
-  logging.info("Getting potential LTRs")
+  print("Getting potential LTRs")
   potentialLTR = parseLTRMatches(args.LTRmatches, proviralSeqs)
-
+  
   # parse BAM file
-  logging.info("Parsing cellranger BAM (namesorted)")
+  print("Parsing cellranger BAM (namesorted)")
   parseCellrangerBam(bamfile = args.bamfile,
     proviralFastaIds = proviralFastaIds,
     proviralReads = dualProviralAlignedReads,
@@ -240,16 +258,22 @@ def main(args):
     top_n = args.topNReads) #debugging
 
   # output BAM files
-  logging.info("Writing out BAM files of parsed records")
+  print("Writing out BAM files of parsed records")
 
   cellrangerBam = pysam.AlignmentFile(args.bamfile, "rb")
   writeBam(args.outputDir + "/" + outputFNs["proviralReads"], cellrangerBam, dualProviralAlignedReads)
   writeBam(args.outputDir + "/" + outputFNs["hostWithPotentialChimera"], cellrangerBam, hostReadsWithPotentialChimera)
   writeBam(args.outputDir + "/" +  outputFNs["umappedWithPotentialChimera"], cellrangerBam, unmappedPotentialChimera)
-  cellrangerBam.close()
 
   # parse host reads with potential chimera
-  parseHostReadsWithPotentialChimera(hostReadsWithPotentialChimera, potentialLTR, clipMinLen = args.LTRClipLen)
+  print("Finding valid chimeras from host reads")
+  hostValidChimeras = parseHostReadsWithPotentialChimera(hostReadsWithPotentialChimera,
+    potentialLTR,
+    clipMinLen = args.LTRClipLen)
+  
+  writeBam(args.outputDir + "/" + outputFNs["hostWithValidChimera"], cellrangerBam, hostValidChimeras["validReads"])
+  print(hostValidChimeras["validHits"])
+  cellrangerBam.close()
 
 
 if __name__ == '__main__':
