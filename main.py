@@ -70,10 +70,11 @@ def parseLTRMatches(LTRmatchesFN, proviralSeqs, endBuffer = 20):
   return LTRdict
 
 
-def getSoftClip(read, clipMinLen):
+def getSoftClip(read, clipMinLen, softClipPad):
   # cutoff same as epiVIA
   cigar = read.cigartuples
   clippedFrag = Seq("")
+  adjacentFrag = Seq("")
 
   clip5Present = False
   clip3Present = False
@@ -91,61 +92,115 @@ def getSoftClip(read, clipMinLen):
   if cigar[0][0] == 4 and cigar[0][1] >= clipMinLen:
     clipLen = cigar[0][1]
     clippedFrag = read.seq[0:clipLen]
+    adjacentFrag = read.seq[clipLen:clipLen + softClipPad]
     clip5Present = True
 
   # clip at 3' position
   if cigar[-1][0] == 4 and cigar[-1][1] >= clipMinLen:
     clipLen = cigar[-1][1]
-    clippedFrag = read.seq[(cigar[-1][1]*-1): ]
+    clippedFrag = read.seq[clipLen * -1: ]
+    adjacentFrag = read.seq[clipLen - softClipPad : clipLen * -1]
     clip3Present = True
 
   # clip can only be present at one end
   if clip5Present and clip3Present:
-    return Seq("")
+    return None
   else:
-    return clippedFrag
+    clippedFragObj = {
+      clippedFrag: clippedFrag,
+      adjacentFrag: adjacentFrag,
+      clip5Present: clip5Present,
+      clip3Present: clip3Present}
+
+    return clippedFragObj
 
 
-def isSoftClipProviral(read, proviralLTRSeqs, clipMinLen = 11):
-  clippedFrag = getSoftClip(read, clipMinLen)
+def isSoftClipProviral(read, proviralLTRSeqs, clipMinLen = 11, softClipPad = 3):
+  clippedFragObj = getSoftClip(read, clipMinLen, softClipPad)
   
-  if len(clippedFrag) == 0:
+  # skip if no clipped fragment long enough is found
+  if clippedFragObj is not None:
     return False
-  
-  strClippedFrag = str(clippedFrag)
+
+  # check if mate is in correct orientation
+  if clippedFragObj.clip5Present and read.next_reference_start < read.reference_start:
+    print('Potential soft clip is at 5prime end but read mate has earlier ref start than current read.')
+    print(read.query_name)
+    return False
+  elif clippedFragObj.clip3Present and read.next_reference_start > read.reference_start:
+    print('Potential soft clip is at 3prime end but read mate has later ref start than current read.')
+    print(read.query_name)
+    return False
+
+  strClippedFrag = str(clippedFragObj.clippedFrag)
 
   # skip if there are any characters other than ATGC 
   if bool(re.compile(r'[^ATGC]').search(strClippedFrag)):
     return False
   
-  hits = {"plus": [], "plusIds": [], "minus" : [], "minusIds": []}
+  hits = {
+    "plus": [],
+    "plusIds": [],
+    "minus" : [],
+    "minusIds": [],
+    "clip5P": clippedFragObj.clip5Present,
+    "clip3P": clippedFragObj.clip3Present}
+
+  # only allow specific keys based on orientation
+  if clippedFragObj.clip5Present:
+    allowedLTRKeys = ["3p", "5pRevComp"]
+  elif clippedFragObj.clip3Present:
+    allowedLTRKeys = ["5p", "3pRevComp"]
+
+  # find hits...
   foundHit = False
-  for key in proviralLTRSeqs:
+  for key in allowedLTRKeys:
     keyPair = proviralLTRSeqs[key]
 
     for ltrType in keyPair:
-      orient = ""
-      if ltrType == "5p" or ltrType == "3p":
-        orient = "plus"
-      else:
-        orient = "minus"
-
-      # find hits...
       ltrTypeSeqs = keyPair[ltrType]
-      
       if len(ltrTypeSeqs) == 0:
         continue
 
-      endBuffer = 3
+      # find orientation
+      orient = "plus" if ltrType == "5p" or ltrType == "3p" else "minus"
+
       for s in ltrTypeSeqs:
         matches = [x.start() for x in re.finditer(strClippedFrag, str(s))]
-        if len(matches) > 0:     
+        if len(matches) == 0:
+          continue
 
-          # allow only if within 3bp of LTR end
-          if min(matches) <= endBuffer or max(matches) + len(strClippedFrag) >= len(str(s)) - endBuffer:
-            hits[orient].append(matches)
-            hits[orient + "Ids"].append(key + "___" + ltrType)
-            foundHit = True
+        ltrLen = len(str(s))
+        # check if match is within soft buffer zone
+        # needs to pass min(matches) <= softClipPad or max(matches) + len(strClippedFrag) >= ltrLen - softClipPad:
+        if (ltrType == "5p" or ltrType == "3pRevComp") and min(matches) > softClipPad:
+          continue
+        elif (ltrType == "3p" or ltrType == "5pRevComp") and max(matches) + len(strClippedFrag) < ltrLen - softClipPad:
+          continue
+
+        # check if the adjacent host clips could have also been aligned to the viral LTR,
+        # thus explaining the lack of viral clip not being at either end of LTR
+        ltrEnd = ""
+        if (ltrType == "5p" or ltrType == "3pRevComp") and min(matches) != 0:
+          ltrEnd = str(s)[0, min(matches)]
+          hostAdjacentBp = str(read.seq)[-len(strClippedFrag) - len(ltrEnd): -len(strClippedFrag)]
+
+        elif (ltrType == "3p" or ltrType == "5pRevComp") and max(matches) != ltrLen - softClipPad:
+          adjacentBpNum = ltrLen - max(matches) - len(strClippedFrag)
+          ltrEnd = str(s)[max(matches) + len(strClippedFrag), ltrLen]
+          hostAdjacentBp = str(read.seq)[len(strClippedFrag), len(strClippedFrag) + adjacentBpNum]
+
+        if ltrEnd != "" and ltrEnd != hostAdjacentBp:
+          print("Viral clip not found at the end of LTR")
+          print(s, matches, read.seq, read.query_name)
+          continue
+
+        # passes all checks!
+        print("successful match")
+        print(s, matches, read.seq, read.query_name)
+        hits[orient].append(matches)
+        hits[orient + "Ids"].append(key + "___" + ltrType)
+        foundHit = True
 
   # can only be plus orientation OR minus orientation only
   if foundHit and len(hits["plus"]) != 0 and len(hits["minus"]) == 0:
