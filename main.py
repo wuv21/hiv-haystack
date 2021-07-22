@@ -208,11 +208,16 @@ def isSoftClipProviral(read, proviralLTRSeqs, clipMinLen = 11, softClipPad = 3):
     return False
 
 
-def parseHostReadsWithPotentialChimera(reads, proviralLTRSeqs, clipMinLen):
+def parseHostReadsWithPotentialChimera(readPairs, proviralLTRSeqs, clipMinLen):
   validHits = []
   validReads = []
 
-  for read in reads:
+  for key in readPairs:
+    # only allow one read mate to have soft clip
+    if len(readPairs[key]) != 1:
+      continue 
+    
+    read = readPairs[key][0]
     potentialHits = isSoftClipProviral(read, proviralLTRSeqs, clipMinLen)
     
     if potentialHits and len(potentialHits['plus']) != 0:
@@ -231,6 +236,11 @@ def parseCellrangerBam(bamfile, proviralFastaIds, proviralReads, hostReadsWithPo
 
   readIndex = 0
   for read in bam:
+    # ignore if optical/PCR duplicate OR without a mate
+    if (read.flag & 1024) or (not read.flag & 1):
+      readIndex += 1
+      continue
+    
     refnameIsProviral = read.reference_name in proviralFastaIds
     # supposed to take mate's ref name or if no mate, the next record in BAM file
     nextRefnameIsProviral = read.next_reference_name in proviralFastaIds
@@ -240,16 +250,11 @@ def parseCellrangerBam(bamfile, proviralFastaIds, proviralReads, hostReadsWithPo
     hasSoftClipAtEnd = cigarString != None and (cigarString[-1][0] == 4 or cigarString[0][0] == 4)
     softClipInitThresh = 7
     softClipIsLongEnough = cigarString != None and (cigarString[-1][1] >= softClipInitThresh or cigarString[0][1] >= softClipInitThresh)
-
-    # ignore if optical/PCR duplicate OR without a mate
-    if (read.flag & 1024) or (not read.flag & 1):
-      readIndex += 1
-      continue
     
     # if read is properly mapped in a pair AND not proviral aligned AND there is soft clipping involved
-    elif (read.flag & 2) and (not refnameIsProviral) and (hasSoftClipAtEnd and softClipIsLongEnough):
+    if (read.flag & 2) and (not refnameIsProviral) and (hasSoftClipAtEnd and softClipIsLongEnough):
       # move to chimera identification
-      hostReadsWithPotentialChimera.append(read)
+      hostReadsWithPotentialChimera[read.qname].append(read)
     
     # if there is a mate AND both are proviral only 
     elif refnameIsProviral and nextRefnameIsProviral:
@@ -312,7 +317,7 @@ def main(args):
   
   # set up initial dictionaries
   dualProviralAlignedReads = defaultdict(list)
-  hostReadsWithPotentialChimera = []
+  hostReadsWithPotentialChimera = defaultdict(list)
   unmappedPotentialChimera = defaultdict(list)
 
   # recover all proviral "chromosome" names from partial fasta file used by Cellranger
@@ -349,7 +354,7 @@ def main(args):
     
     # import files...
     #dualProviralAlignedReads = importProcessedBam(args.outputDir + "/" + outputFNs["proviralReads"], returnDict = True)
-    hostReadsWithPotentialChimera = importProcessedBam(args.outputDir + "/" + outputFNs["hostWithPotentialChimera"], returnDict = False)
+    hostReadsWithPotentialChimera = importProcessedBam(args.outputDir + "/" + outputFNs["hostWithPotentialChimera"], returnDict = True)
     #unmappedPotentialChimera = importProcessedBam(args.outputDir + "/" +  outputFNs["umappedWithPotentialChimera"], returnDict = True)
 
   # parse host reads with potential chimera
