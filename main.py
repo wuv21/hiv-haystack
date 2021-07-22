@@ -86,7 +86,7 @@ def getSoftClip(read, clipMinLen, softClipPad):
       softClipCount += 1
 
   if softClipCount > 1:
-    return Seq("")
+    return None
 
   # clip is at 5' position
   if cigar[0][0] == 4 and cigar[0][1] >= clipMinLen:
@@ -107,10 +107,10 @@ def getSoftClip(read, clipMinLen, softClipPad):
     return None
   else:
     clippedFragObj = {
-      clippedFrag: clippedFrag,
-      adjacentFrag: adjacentFrag,
-      clip5Present: clip5Present,
-      clip3Present: clip3Present}
+      "clippedFrag": clippedFrag,
+      "adjacentFrag": adjacentFrag,
+      "clip5Present": clip5Present,
+      "clip3Present": clip3Present}
 
     return clippedFragObj
 
@@ -119,20 +119,16 @@ def isSoftClipProviral(read, proviralLTRSeqs, clipMinLen = 11, softClipPad = 3):
   clippedFragObj = getSoftClip(read, clipMinLen, softClipPad)
   
   # skip if no clipped fragment long enough is found
-  if clippedFragObj is not None:
+  if clippedFragObj is None:
     return False
 
   # check if mate is in correct orientation
-  if clippedFragObj.clip5Present and read.next_reference_start < read.reference_start:
-    print('Potential soft clip is at 5prime end but read mate has earlier ref start than current read.')
-    print(read.query_name)
+  if clippedFragObj["clip5Present"] and read.next_reference_start < read.reference_start:
     return False
-  elif clippedFragObj.clip3Present and read.next_reference_start > read.reference_start:
-    print('Potential soft clip is at 3prime end but read mate has later ref start than current read.')
-    print(read.query_name)
+  elif clippedFragObj["clip3Present"] and read.next_reference_start > read.reference_start:
     return False
 
-  strClippedFrag = str(clippedFragObj.clippedFrag)
+  strClippedFrag = str(clippedFragObj["clippedFrag"])
 
   # skip if there are any characters other than ATGC 
   if bool(re.compile(r'[^ATGC]').search(strClippedFrag)):
@@ -143,21 +139,22 @@ def isSoftClipProviral(read, proviralLTRSeqs, clipMinLen = 11, softClipPad = 3):
     "plusIds": [],
     "minus" : [],
     "minusIds": [],
-    "clip5P": clippedFragObj.clip5Present,
-    "clip3P": clippedFragObj.clip3Present}
+    "clip5P": clippedFragObj["clip5Present"],
+    "clip3P": clippedFragObj["clip3Present"]}
 
+  allowedLTRKeys = []
   # only allow specific keys based on orientation
-  if clippedFragObj.clip5Present:
+  if clippedFragObj["clip5Present"]:
     allowedLTRKeys = ["3p", "5pRevComp"]
-  elif clippedFragObj.clip3Present:
+  elif clippedFragObj["clip3Present"]:
     allowedLTRKeys = ["5p", "3pRevComp"]
 
   # find hits...
   foundHit = False
-  for key in allowedLTRKeys:
+  for key in proviralLTRSeqs:
     keyPair = proviralLTRSeqs[key]
 
-    for ltrType in keyPair:
+    for ltrType in allowedLTRKeys:
       ltrTypeSeqs = keyPair[ltrType]
       if len(ltrTypeSeqs) == 0:
         continue
@@ -182,13 +179,13 @@ def isSoftClipProviral(read, proviralLTRSeqs, clipMinLen = 11, softClipPad = 3):
         # thus explaining the lack of viral clip not being at either end of LTR
         ltrEnd = ""
         if (ltrType == "5p" or ltrType == "3pRevComp") and min(matches) != 0:
-          ltrEnd = str(s)[0, min(matches)]
+          ltrEnd = str(s)[0:min(matches)]
           hostAdjacentBp = str(read.seq)[-len(strClippedFrag) - len(ltrEnd): -len(strClippedFrag)]
 
         elif (ltrType == "3p" or ltrType == "5pRevComp") and max(matches) != ltrLen - softClipPad:
           adjacentBpNum = ltrLen - max(matches) - len(strClippedFrag)
-          ltrEnd = str(s)[max(matches) + len(strClippedFrag), ltrLen]
-          hostAdjacentBp = str(read.seq)[len(strClippedFrag), len(strClippedFrag) + adjacentBpNum]
+          ltrEnd = str(s)[max(matches) + len(strClippedFrag): ltrLen]
+          hostAdjacentBp = str(read.seq)[len(strClippedFrag): len(strClippedFrag) + adjacentBpNum]
 
         if ltrEnd != "" and ltrEnd != hostAdjacentBp:
           print("Viral clip not found at the end of LTR")
@@ -351,9 +348,9 @@ def main(args):
     print("Parsed BAM files already found. Importing these files to save time.")
     
     # import files...
-    dualProviralAlignedReads = importProcessedBam(args.outputDir + "/" + outputFNs["proviralReads"], returnDict = True)
+    #dualProviralAlignedReads = importProcessedBam(args.outputDir + "/" + outputFNs["proviralReads"], returnDict = True)
     hostReadsWithPotentialChimera = importProcessedBam(args.outputDir + "/" + outputFNs["hostWithPotentialChimera"], returnDict = False)
-    unmappedPotentialChimera = importProcessedBam(args.outputDir + "/" +  outputFNs["umappedWithPotentialChimera"], returnDict = True)
+    #unmappedPotentialChimera = importProcessedBam(args.outputDir + "/" +  outputFNs["umappedWithPotentialChimera"], returnDict = True)
 
   # parse host reads with potential chimera
   print("Finding valid chimeras from host reads")
