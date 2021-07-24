@@ -129,6 +129,15 @@ def isSoftClipProviral(read, proviralLTRSeqs, clipMinLen = 11, softClipPad = 3):
   # elif clippedFragObj["clip3Present"] and read.next_reference_start > read.reference_start:
   #   return False
 
+  if clippedFragObj["clip5Present"] and read.flag & 16:
+    print("orientation off")
+    print(str(read))
+    return False
+  elif clippedFragObj["clip3Present"] and read.flag & 32:
+    print("orientation off")
+    print(str(read))
+    return False
+
   strClippedFrag = str(clippedFragObj["clippedFrag"])
 
   # skip if there are any characters other than ATGC 
@@ -234,7 +243,7 @@ def parseHostReadsWithPotentialChimera(readPairs, proviralLTRSeqs, clipMinLen):
 
 def parseCellrangerBam(bamfile, proviralFastaIds, proviralReads, hostReadsWithPotentialChimera, unmappedPotentialChimera, top_n = -1):
   bam = pysam.AlignmentFile(bamfile, "rb", threads = 20)
-
+  
   readIndex = 0
   for read in bam:
     # ignore if optical/PCR duplicate OR without a mate
@@ -249,7 +258,7 @@ def parseCellrangerBam(bamfile, proviralFastaIds, proviralReads, hostReadsWithPo
     cigarString = read.cigartuples
     # 4 is soft clip
     hasSoftClipAtEnd = cigarString != None and (cigarString[-1][0] == 4 or cigarString[0][0] == 4)
-    softClipInitThresh = 7
+    softClipInitThresh = 9
     softClipIsLongEnough = cigarString != None and (cigarString[-1][1] >= softClipInitThresh or cigarString[0][1] >= softClipInitThresh)
     
     # if read is properly mapped in a pair AND not proviral aligned AND there is soft clipping involved
@@ -269,7 +278,7 @@ def parseCellrangerBam(bamfile, proviralFastaIds, proviralReads, hostReadsWithPo
     
     readIndex += 1
     
-    if readIndex % 1000000 == 0:
+    if readIndex % 10000000 == 0:
       print("Parsed {} reads".format(str(readIndex)))
 
     if top_n != -1 and readIndex > top_n:
