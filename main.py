@@ -122,20 +122,12 @@ def isSoftClipProviral(read, proviralLTRSeqs, clipMinLen = 11, softClipPad = 3):
   if clippedFragObj is None:
     return False
 
-  # check if mate is in correct orientation
-  # This actually should already be ok because the read pair already has to be properly mapped.
-  # if clippedFragObj["clip5Present"] and read.next_reference_start < read.reference_start:
-  #   return False
-  # elif clippedFragObj["clip3Present"] and read.next_reference_start > read.reference_start:
-  #   return False
-
+  # soft clip position has to match correct forward/reverse strandness of read
+  # if 5', read has to be forward to not exit
   if clippedFragObj["clip5Present"] and read.flag & 16:
-    print("orientation off")
-    print(str(read))
     return False
+  # if 3', read has to be reverse strand to not exit
   elif clippedFragObj["clip3Present"] and read.flag & 32:
-    print("orientation off")
-    print(str(read))
     return False
 
   strClippedFrag = str(clippedFragObj["clippedFrag"])
