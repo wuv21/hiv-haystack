@@ -8,6 +8,7 @@ import csv
 import re
 from pprint import pprint
 
+
 def getProviralFastaIDs(fafile, recordSeqs):
   ids = []
   for record in SeqIO.parse(fafile, format = "fasta"):
@@ -20,7 +21,6 @@ def getProviralFastaIDs(fafile, recordSeqs):
 def extractCellBarcode(read):
   # accept only CB tag because it passes the allowlist set by 10X
   tags = dict(read.tags)
-  
   if "CB" in tags:
       barcode = tags["CB"]
   else:
@@ -34,38 +34,52 @@ def getLTRseq(seq, start, end):
   return ltrSeq
 
 
-def parseLTRMatches(LTRmatchesFN, proviralSeqs, endBuffer = 20):
+def parseLTRMatches(LTRargs, proviralSeqs, position = False, endBuffer = 20):
   LTRdict = defaultdict(lambda: {"5p": [], "5pRevComp": [], "3p": [], "3pRevComp":[]})
 
-  with open(LTRmatchesFN, "r") as fhandle:
-    rd = csv.reader(fhandle, delimiter = "\t")
+  if position:
+    marks = [int(x) for x in LTRargs.split(",")]
 
-    for row in rd:
-      # index 1 = subject ID (i.e. the original sample's viral fasta ID)
-      # index 2 = percent match
-      # index 6 = query start
-      # index 7 = query end
-      # index 8 = subject start
-      # index 9 = subject end
-      
-      subjID = row[1]
-      # qstart = row[6]
-      # qend = row[7]
-      sstart = int(row[8])
-      send = int(row[9])
-      slen = len(proviralSeqs[subjID][0])
-      
-      # must be at least 550bp long
-      if abs(send - sstart) < 550:
-        continue
-      elif sstart < endBuffer:
-        seq = getLTRseq(proviralSeqs[subjID][0], 1, send)
-        LTRdict[subjID]["5p"].append(seq)
-        LTRdict[subjID]["5pRevComp"].append(seq.reverse_complement())
-      elif slen - send < endBuffer:
-        seq = getLTRseq(proviralSeqs[subjID][0], sstart, slen)
-        LTRdict[subjID]["3p"].append(seq)
-        LTRdict[subjID]["3pRevComp"].append(seq.reverse_complement())
+    for k in proviralSeqs:
+      proviralSeq = proviralSeqs[k][0]
+      ltr5p = getLTRseq(proviralSeq, marks[0], marks[1])
+      ltr3p = getLTRseq(proviralSeq, marks[2], marks[3])
+
+      LTRdict[k]["5p"].append(ltr5p)
+      LTRdict[k]["5pRevComp"].append(ltr5p.reverse_complement())
+      LTRdict[k]["3p"].append(ltr3p)
+      LTRdict[k]["3pRevComp"].append(ltr3p.reverse_complement())
+
+  else:
+    with open(LTRargs, "r") as fhandle:
+      rd = csv.reader(fhandle, delimiter = "\t")
+
+      for row in rd:
+        # index 1 = subject ID (i.e. the original sample's viral fasta ID)
+        # index 2 = percent match
+        # index 6 = query start
+        # index 7 = query end
+        # index 8 = subject start
+        # index 9 = subject end
+        
+        subjID = row[1]
+        # qstart = row[6]
+        # qend = row[7]
+        sstart = int(row[8])
+        send = int(row[9])
+        slen = len(proviralSeqs[subjID][0])
+        
+        # must be at least 550bp long
+        if abs(send - sstart) < 550:
+          continue
+        elif sstart < endBuffer:
+          seq = getLTRseq(proviralSeqs[subjID][0], 1, send)
+          LTRdict[subjID]["5p"].append(seq)
+          LTRdict[subjID]["5pRevComp"].append(seq.reverse_complement())
+        elif slen - send < endBuffer:
+          seq = getLTRseq(proviralSeqs[subjID][0], sstart, slen)
+          LTRdict[subjID]["3p"].append(seq)
+          LTRdict[subjID]["3pRevComp"].append(seq.reverse_complement())
 
   return LTRdict
 
@@ -328,9 +342,12 @@ def main(args):
   proviralFastaIds = getProviralFastaIDs(args.viralFasta, proviralSeqs)
 
   # get possible LTR regions from fasta file
-  # TODO build into program (as opposed to running it before)
-  print("Getting potential LTRs")
-  potentialLTR = parseLTRMatches(args.LTRmatches, proviralSeqs)
+  if args.LTRmatches is not None:
+    print("Getting potential LTRs")
+    potentialLTR = parseLTRMatches(args.LTRmatches, proviralSeqs)
+  elif args.LTRpositions is not None:
+    print("LTR positions provided as {}".format(args.LTRpositions))
+    potentialLTR = parseLTRMatches(args.LTRpositions, proviralSeqs, position = True)
   
   if not os.path.exists(args.outputDir + "/" + outputFNs["proviralReads"]):
     # parse BAM file
@@ -392,7 +409,7 @@ if __name__ == '__main__':
   parser.add_argument("--LTRmatches",
     help = "blastn table output format for LTR matches to HXB2 LTR")
   parser.add_argument("--LTRpositions",
-    help = "if only using one viral sequence, detail LTR positions by 5' start, 5' end, 3' start, 3'end (ex: 1,634,9086,9719)")
+    help = "if only using one viral sequence, detail LTR positions (1-index) by 5' start, 5' end, 3' start, 3'end (ex: 1,634,9086,9719)")
   parser.add_argument("--LTRClipLen",
     default = 11,
     type = int,
