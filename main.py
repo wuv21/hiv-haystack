@@ -390,8 +390,9 @@ if __name__ == '__main__':
     type = int,
     help = "Limit to n number of records in BAM file. Default is all (-1)")
   parser.add_argument("--LTRmatches",
-    required = True,
     help = "blastn table output format for LTR matches to HXB2 LTR")
+  parser.add_argument("--LTRpositions",
+    help = "if only using one viral sequence, detail LTR positions by 5' start, 5' end, 3' start, 3'end (ex: 1,634,9086,9719)")
   parser.add_argument("--LTRClipLen",
     default = 11,
     type = int,
@@ -400,5 +401,21 @@ if __name__ == '__main__':
 
   if not os.path.exists(args.outputDir):
     os.makedirs(args.outputDir)
+
+  if not os.path.exists(args.bamfile):
+    raise Exception("BAM file not found")
+
+  if not os.path.exists(args.viralFasta):
+    raise Exception("viral FASTA file not found")
+
+  if args.LTRmatches is not None and args.LTRpositions is not None:
+    raise Exception("LTRmatches and LTRpositions cannot both be set")
+  elif args.LTRmatches is None and args.LTRpositions is None:
+    raise Exception("One of LTRmatches and LTRpositions must be specified")
+  elif args.LTRpositions is not None and len(args.LTRpositions.split(",")) != 4:
+    raise Exception("LTRpositions must have LTR positions: 5' start, 5' end, 3' start, 3'end (ex: 1,634,9086,9719)")
+  elif args.LTRmatches is not None and not os.path.exists(args.LTRmatches):
+    raise Exception("LTRmatches file does not exist")
+
 
   main(args)
