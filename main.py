@@ -247,6 +247,62 @@ def parseHostReadsWithPotentialChimera(readPairs, proviralLTRSeqs, clipMinLen):
   return returnVal
 
 
+def getAltAlign(readTags):
+  readTags = dict(readTags)
+  alt_aligns = []
+  if 'XA' in readTags:
+    alts = readTags['XA'].rstrip(";").split(";")
+    for alt in alts:
+      alt_name, alt_pos, alt_cigar = alt.split(",")[0:3]
+      alt_aligns.append([alt_name, alt_pos, alt_cigar])
+
+  return alt_aligns
+
+
+def checkLTR(read1, read2):
+  read1AltAlign = getAltAlign(read1.tags)
+  read2AltAlign = getAltAlign(read2.tags)
+
+  if len(read1AltAlign) != 1 and len(read2AltAlign) != 1: 
+    return read1, read2
+
+  # if read 2 has softclip at 3p end
+  if read2.cigar[-1][0] == 4 and "S" not in read1.cigarstring:
+    print(str(read1), str(read2))
+  elif read1.cigar[0][0] == 4 and "S" not in read2.cigarstring:
+    print(str(read1), str(read2))
+  
+  return read1, read2
+
+
+def parseProviralReads(readPairs, proviralLTRSeqs, clipMinLen):
+  validReads = []
+  validChimeras = []
+
+  for rpName in readPairs:
+    # must be paired
+    if len(readPairs[rpName]) != 2:
+      continue
+    
+    read1 = readPairs[rpName][0]
+    read2 = readPairs[rpName][1]
+
+    # skip if only single mate mapped
+    if read1.is_unmapped or read2.is_unmapped:
+      continue
+    
+    # rearrange depending on where alignment is
+    if read1.reference_start > read2.reference_start:
+      read1, read2 = read2, read1
+
+    # check arrangement of LTR (correctLTR function of epiVIA)
+    read1, read2 = checkLTR(read1, read2)
+
+
+    returnVal = {"validReads" : validReads, "validChimeras": validChimeras}
+    return returnVal
+
+
 def parseCellrangerBam(bamfile, proviralFastaIds, proviralReads, hostReadsWithPotentialChimera, unmappedPotentialChimera, top_n = -1):
   bam = pysam.AlignmentFile(bamfile, "rb", threads = 20)
   
@@ -372,16 +428,25 @@ def main(args):
     print("Parsed BAM files already found. Importing these files to save time.")
     
     # import files...
-    #dualProviralAlignedReads = importProcessedBam(args.outputDir + "/" + outputFNs["proviralReads"], returnDict = True)
-    hostReadsWithPotentialChimera = importProcessedBam(args.outputDir + "/" + outputFNs["hostWithPotentialChimera"], returnDict = True)
-    #unmappedPotentialChimera = importProcessedBam(args.outputDir + "/" +  outputFNs["umappedWithPotentialChimera"], returnDict = True)
+    dualProviralAlignedReads = importProcessedBam(args.outputDir + "/" + outputFNs["proviralReads"], returnDict = True)
+    # hostReadsWithPotentialChimera = importProcessedBam(args.outputDir + "/" + outputFNs["hostWithPotentialChimera"], returnDict = True)
+    # unmappedPotentialChimera = importProcessedBam(args.outputDir + "/" +  outputFNs["umappedWithPotentialChimera"], returnDict = True)
 
   # parse host reads with potential chimera
-  print("Finding valid chimeras from host reads")
-  hostValidChimeras = parseHostReadsWithPotentialChimera(hostReadsWithPotentialChimera,
-    potentialLTR,
-    clipMinLen = args.LTRClipLen)
+  # print("Finding valid chimeras from host reads")
+  # hostValidChimeras = parseHostReadsWithPotentialChimera(hostReadsWithPotentialChimera,
+  #   potentialLTR,
+  #   clipMinLen = args.LTRClipLen)
   
+  print("Finding valid chimeras from proviral reads")
+  proviralValidChimeras = parseProviralReads(dualProviralAlignedReads,
+    potentialLTR,
+    clipMinLen = args.LTRClipLen
+  )
+
+  return
+
+  # write out host reads with valid chimera 
   cellrangerBam = pysam.AlignmentFile(args.bamfile, "rb")
   writeBam(args.outputDir + "/" + outputFNs["hostWithValidChimera"], cellrangerBam, hostValidChimeras["validReads"])
   print(hostValidChimeras["validHits"])
