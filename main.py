@@ -24,7 +24,7 @@ def extractCellBarcode(read):
   if "CB" in tags:
       barcode = tags["CB"]
   else:
-      barcode = "None"
+      barcode = None
 
   return barcode
 
@@ -234,6 +234,11 @@ def parseHostReadsWithPotentialChimera(readPairs, proviralLTRSeqs, clipMinLen):
       continue 
     
     read = readPairs[key][0]
+
+    # must contain valid cell barcode passing allowlist
+    if extractCellBarcode(read) is None:
+     continue
+    
     potentialHits = isSoftClipProviral(read, proviralLTRSeqs, clipMinLen)
     
     if potentialHits and len(potentialHits['plus']) != 0:
@@ -247,35 +252,19 @@ def parseHostReadsWithPotentialChimera(readPairs, proviralLTRSeqs, clipMinLen):
   return returnVal
 
 
-def getAltAlign(readTags):
-  readTags = dict(readTags)
-  alt_aligns = []
-  if 'XA' in readTags:
-    alts = readTags['XA'].rstrip(";").split(";")
-    for alt in alts:
-      alt_name, alt_pos, alt_cigar = alt.split(",")[0:3]
-      alt_aligns.append([alt_name, alt_pos, alt_cigar])
-
-  return alt_aligns
-
-
-def checkLTR(read1, read2):
-  read1AltAlign = getAltAlign(read1.tags)
-  read2AltAlign = getAltAlign(read2.tags)
-
-  if len(read1AltAlign) != 1 and len(read2AltAlign) != 1: 
-    return read1, read2
-
-  # if read 2 has softclip at 3p end
-  if read2.cigar[-1][0] == 4 and "S" not in read1.cigarstring:
-    print(str(read1), str(read2))
-  elif read1.cigar[0][0] == 4 and "S" not in read2.cigarstring:
-    print(str(read1), str(read2))
-  
-  return read1, read2
+# def getAltAlign(readTags):
+#   readTags = dict(readTags)
+#   altAligns = []
+#   if 'XA' in readTags:
+#     alts = readTags['XA'].rstrip(";").split(";")
+#     for alt in alts:
+#       altName, altPos, altCigar = alt.split(",")[0:3]
+#       altAligns.append([altName, altPos, altCigar])
+# 
+#   return altAligns
 
 
-def parseProviralReads(readPairs, proviralLTRSeqs, clipMinLen):
+def parseProviralReads(readPairs):
   validReads = []
   validChimeras = []
 
@@ -286,6 +275,11 @@ def parseProviralReads(readPairs, proviralLTRSeqs, clipMinLen):
     
     read1 = readPairs[rpName][0]
     read2 = readPairs[rpName][1]
+    
+    print(extractCellBarcode(read1))
+    # must contain a valid cell barcode passing allowlist
+    if extractCellBarcode(read1) is None:
+      continue
 
     # skip if only single mate mapped
     if read1.is_unmapped or read2.is_unmapped:
@@ -295,12 +289,63 @@ def parseProviralReads(readPairs, proviralLTRSeqs, clipMinLen):
     if read1.reference_start > read2.reference_start:
       read1, read2 = read2, read1
 
-    # check arrangement of LTR (correctLTR function of epiVIA)
-    read1, read2 = checkLTR(read1, read2)
-
+    if "S" in read1.cigarstring or "S" in read2.cigarstring:
+      print("Potential viral read with host chimera. Please verify the following paired reads:")
+      print(read1.to_string())
+      print(read2.to_string())
+      print()
+    else:
+      validReads.append(readPairs[rpName])
 
     returnVal = {"validReads" : validReads, "validChimeras": validChimeras}
     return returnVal
+
+
+def parseUnmappedReads(readPairs, proviralFastaIds, proviralLTRSeqs, clipMinLen = 11, minHostQuality = 30):
+  validUnmapped = []
+  validChimera = []
+  
+  for k in readPairs:
+    readPair = readPairs[k]
+    if readPair[0].reference_name in proviralFastaIds:
+      viralRead = readPair[0]
+      hostRead = readPair[1]
+    else:
+      viralRead = readPair[1]
+      hostRead = readPair[0]
+
+    # host read must have high enough mapq
+    # for viral read, no check since mapq is unrealiable if using multiple viral seqs
+    if hostRead.mapq < minHostQuality:
+      continue
+    
+    hostReadSubs = hostRead.cigarstring.count("S")
+    viralReadSubs = viralRead.cigarstring.count("S")
+
+    
+    if hostReadSubs > 1 or viralReadSubs > 1:
+      print("Multiple soft clips detected in host or viral read, but likely still valid")
+      continue
+
+    elif hostReadSubs == 0 and viralReadSubs == 0:
+      print("Valid unmapped but no integration site possible")
+      validUnmapped.append(readPair)
+      continue
+
+    elif hostReadSubs == 1 and viralReadSubs == 1:
+      print("Soft clip detected in both host and viral")
+
+    elif hostReadSubs == 1:
+      print("Soft clip detected in host")
+
+    elif viralReadSubs == 1:
+      print("Soft clip detected in virus")
+
+
+    print(hostRead.to_string())
+    print(viralRead.to_string())
+    print()
+  return
 
 
 def parseCellrangerBam(bamfile, proviralFastaIds, proviralReads, hostReadsWithPotentialChimera, unmappedPotentialChimera, top_n = -1):
@@ -430,7 +475,7 @@ def main(args):
     # import files...
     dualProviralAlignedReads = importProcessedBam(args.outputDir + "/" + outputFNs["proviralReads"], returnDict = True)
     # hostReadsWithPotentialChimera = importProcessedBam(args.outputDir + "/" + outputFNs["hostWithPotentialChimera"], returnDict = True)
-    # unmappedPotentialChimera = importProcessedBam(args.outputDir + "/" +  outputFNs["umappedWithPotentialChimera"], returnDict = True)
+    unmappedPotentialChimera = importProcessedBam(args.outputDir + "/" +  outputFNs["umappedWithPotentialChimera"], returnDict = True)
 
   # parse host reads with potential chimera
   # print("Finding valid chimeras from host reads")
@@ -439,10 +484,10 @@ def main(args):
   #   clipMinLen = args.LTRClipLen)
   
   print("Finding valid chimeras from proviral reads")
-  proviralValidChimeras = parseProviralReads(dualProviralAlignedReads,
-    potentialLTR,
-    clipMinLen = args.LTRClipLen
-  )
+  proviralValidChimeras = parseProviralReads(dualProviralAlignedReads)
+
+  print("Finding valid unmapped reads that might span between integration site")
+  validUnmappedReads = parseUnmappedReads(unmappedPotentialChimera, proviralFastaIds, potentialLTR)
 
   return
 
