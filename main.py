@@ -252,21 +252,9 @@ def parseHostReadsWithPotentialChimera(readPairs, proviralLTRSeqs, clipMinLen):
   return returnVal
 
 
-# def getAltAlign(readTags):
-#   readTags = dict(readTags)
-#   altAligns = []
-#   if 'XA' in readTags:
-#     alts = readTags['XA'].rstrip(";").split(";")
-#     for alt in alts:
-#       altName, altPos, altCigar = alt.split(",")[0:3]
-#       altAligns.append([altName, altPos, altCigar])
-# 
-#   return altAligns
-
-
-def parseProviralReads(readPairs):
+def parseProviralReads(readPairs, proviralSeqs, clipMinLen = 11):
   validReads = []
-  validChimeras = []
+  potentialValidChimeras = []
 
   for rpName in readPairs:
     # must be paired
@@ -276,7 +264,6 @@ def parseProviralReads(readPairs):
     read1 = readPairs[rpName][0]
     read2 = readPairs[rpName][1]
     
-    print(extractCellBarcode(read1))
     # must contain a valid cell barcode passing allowlist
     if extractCellBarcode(read1) is None:
       continue
@@ -285,29 +272,62 @@ def parseProviralReads(readPairs):
     if read1.is_unmapped or read2.is_unmapped:
       continue
     
+    # add to allowed proviral reads...
+    validReads.append(read1)
+    validReads.append(read2)
+
+    # move on to chimera analysis
     # rearrange depending on where alignment is
     if read1.reference_start > read2.reference_start:
       read1, read2 = read2, read1
+    
+    # skip if both reads have a substitution
+    read1Subs = read1.cigarstring.count("S")
+    read2Subs = read2.cigarstring.count("S")
+    if read1Subs + read2Subs > 1:
+      continue
 
-    if "S" in read1.cigarstring or "S" in read2.cigarstring:
-      print("Potential viral read with host chimera. Please verify the following paired reads:")
+    # check position to make sure it is near start/end of LTR
+    refLen = len(proviralSeqs[read1.reference_name][0])
+    alignBuffer = 3
+    
+    read1Near5p = read1.reference_start <= alignBuffer
+    read2Near3p = read2.reference_start >= refLen - read2.query_length - alignBuffer -1
+
+    if not read1Near5p or not read2Near3p:
+      # print("{} is not close enough to LTR".format(read1.qname))
+      continue
+
+    # verify length of substitution
+    if read1Near5p and read1.cigar[0][0] == 4 and read1.cigar[0][1] >= clipMinLen:
+      print("Potential viral read 1 with host chimera. Please verify the following paired reads:")
       print(read1.to_string())
       print(read2.to_string())
       print()
-    else:
-      validReads.append(readPairs[rpName])
 
-    returnVal = {"validReads" : validReads, "validChimeras": validChimeras}
-    return returnVal
+      potentialvalidchimeras.append(read1)
+      potentialvalidchimeras.append(read2)
+
+    elif read2Near5p and read2.cigar[-1][0] == 4 and read2.cigar[-1][1] >= clipMinLen:
+      print("Potential viral read 2 with host chimera. Please verify the following paired reads:")
+      print(read1.to_string())
+      print(read2.to_string())
+      print()
+
+      potentialValidChimeras.append(read1)
+      potentialValidChimeras.append(read2)
+
+  returnVal = {"validReads" : validReads, "potentialValidChimeras": potentialValidChimeras}
+  return returnVal
 
 
-def parseUnmappedReads(readPairs, proviralFastaIds, proviralLTRSeqs, clipMinLen = 11, minHostQuality = 30):
+def parseUnmappedReads(readPairs, proviralSeqs, proviralLTRSeqs, clipMinLen = 11, minHostQuality = 30):
   validUnmapped = []
   validChimera = []
   
   for k in readPairs:
     readPair = readPairs[k]
-    if readPair[0].reference_name in proviralFastaIds:
+    if readPair[0].reference_name in proviralSeqs.keys():
       viralRead = readPair[0]
       hostRead = readPair[1]
     else:
@@ -321,26 +341,30 @@ def parseUnmappedReads(readPairs, proviralFastaIds, proviralLTRSeqs, clipMinLen 
     
     hostReadSubs = hostRead.cigarstring.count("S")
     viralReadSubs = viralRead.cigarstring.count("S")
-
     
-    if hostReadSubs > 1 or viralReadSubs > 1:
+    if hostReadSubs + viralReadSubs > 1:
       print("Multiple soft clips detected in host or viral read, but likely still valid")
+      validUnmapped.append(readPair)
       continue
 
     elif hostReadSubs == 0 and viralReadSubs == 0:
-      print("Valid unmapped but no integration site possible")
+      print("{} Valid unmapped but no integration site possible".format(hostRead.qname))
+      print()
       validUnmapped.append(readPair)
       continue
 
     elif hostReadSubs == 1 and viralReadSubs == 1:
       print("Soft clip detected in both host and viral")
 
-    elif hostReadSubs == 1:
+    elif hostReadSubs == 1 and hostRead.cigar[0][0] == 4 or hostRead.cigar[-1][0] == 4:
       print("Soft clip detected in host")
 
     elif viralReadSubs == 1:
       print("Soft clip detected in virus")
 
+    else:
+      validUnmapped.append(readPair)
+      continue
 
     print(hostRead.to_string())
     print(viralRead.to_string())
@@ -429,7 +453,9 @@ def main(args):
     "proviralReads": "proviralReads.bam",
     "hostWithPotentialChimera": "hostWithPotentialChimera.bam",
     "umappedWithPotentialChimera": "unmappedWithPotentialChimera.bam",
-    "hostWithValidChimera": "hostWithValidChimera.bam"
+    "hostWithValidChimera": "hostWithValidChimera.bam",
+    "validProviralReads": "validProviralReads.bam",
+    "validProviralReadsWithPotentialChimera": "validProviralReadsWithPotentialChimera.bam"
   }
   
   # set up initial dictionaries
@@ -474,7 +500,7 @@ def main(args):
     
     # import files...
     dualProviralAlignedReads = importProcessedBam(args.outputDir + "/" + outputFNs["proviralReads"], returnDict = True)
-    # hostReadsWithPotentialChimera = importProcessedBam(args.outputDir + "/" + outputFNs["hostWithPotentialChimera"], returnDict = True)
+    #hostReadsWithPotentialChimera = importProcessedBam(args.outputDir + "/" + outputFNs["hostWithPotentialChimera"], returnDict = True)
     unmappedPotentialChimera = importProcessedBam(args.outputDir + "/" +  outputFNs["umappedWithPotentialChimera"], returnDict = True)
 
   # parse host reads with potential chimera
@@ -484,17 +510,19 @@ def main(args):
   #   clipMinLen = args.LTRClipLen)
   
   print("Finding valid chimeras from proviral reads")
-  proviralValidChimeras = parseProviralReads(dualProviralAlignedReads)
+  proviralValidChimeras = parseProviralReads(dualProviralAlignedReads, proviralSeqs)
 
   print("Finding valid unmapped reads that might span between integration site")
-  validUnmappedReads = parseUnmappedReads(unmappedPotentialChimera, proviralFastaIds, potentialLTR)
+  validUnmappedReads = parseUnmappedReads(unmappedPotentialChimera, proviralSeqs, potentialLTR)
 
-  return
-
-  # write out host reads with valid chimera 
+  # write out processed files
   cellrangerBam = pysam.AlignmentFile(args.bamfile, "rb")
-  writeBam(args.outputDir + "/" + outputFNs["hostWithValidChimera"], cellrangerBam, hostValidChimeras["validReads"])
-  print(hostValidChimeras["validHits"])
+  #writeBam(args.outputDir + "/" + outputFNs["hostWithValidChimera"], cellrangerBam, hostValidChimeras["validReads"])
+
+  writeBam(args.outputDir + "/" + outputFNs["validProviralReads"], cellrangerBam, proviralValidChimeras["validReads"])
+  writeBam(args.outputDir + "/" + outputFNs["validProviralReadsWithPotentialChimera"],
+    cellrangerBam,
+    proviralValidChimeras["potentialValidChimeras"])
   cellrangerBam.close()
 
 
