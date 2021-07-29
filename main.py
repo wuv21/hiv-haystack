@@ -94,12 +94,7 @@ def getSoftClip(read, clipMinLen, softClipPad):
   clip3Present = False
 
   # loop through cigar to make sure there's only 1 soft clip
-  softClipCount = 0
-  for c in cigar:
-    if c[0] == 4:
-      softClipCount += 1
-
-  if softClipCount > 1:
+  if read.cigarstring.count("S") > 1:
     return None
 
   # clip is at 5' position
@@ -241,10 +236,7 @@ def parseHostReadsWithPotentialChimera(readPairs, proviralLTRSeqs, clipMinLen):
     
     potentialHits = isSoftClipProviral(read, proviralLTRSeqs, clipMinLen)
     
-    if potentialHits and len(potentialHits['plus']) != 0:
-      validHits.append(potentialHits)
-      validReads.append(read)
-    elif potentialHits and len(potentialHits['minus']) != 0:
+    if potentialHits:
       validHits.append(potentialHits)
       validReads.append(read)
 
@@ -358,32 +350,30 @@ def parseUnmappedReads(readPairs, proviralSeqs, proviralLTRSeqs, clipMinLen = 11
     if hostReadSubs == 1 and viralReadSubs == 1:
       print("Soft clip detected in both host and viral")
 
+    # host read soft clip
     elif hostReadSubs == 1:
-      if hostRead.cigar[0][0] == 4 and hostRead.cigar[0][1] >= clipMinLen:
-        print("Possible valid soft clip on host read")
-      elif hostRead.cigar[-1][0] == 4 and hostRead.cigar[-1][1] >= clipMinLen:
-        print("Possible valid soft clip on host read")
+      potentialHits = isSoftClipProviral(hostRead, proviralLTRSeqs, clipMinLen)
+      if potentialHits:
+        validChimera.append(readPair)
       else:
-        print("{}: Soft clip detected but either not at end or not long enough".format(hostRead.qname))
         validUnmapped.append(readPair)
-        continue
 
+    # viral read soft clip
     elif viralReadSubs == 1:
-      # check that it is near start or end of sequence
+      # TODO check that it is near start or end of sequence
 
-      if viralRead.cigar[0][0] == 4 and viralRead.cigar[0][1] >= clipMinLen:
-      
-      
-      print("Soft clip detected in virus")
+      viralSoftClip = getSoftClip(viralRead, clipMinLen)
+      if viralSoftClip is not None:
+        print("{}: soft clip detected in virus".format(viralRead.qname)))
+        pprint(viralSoftClip)
 
     else:
       validUnmapped.append(readPair)
-      continue
 
-    print(hostRead.to_string())
-    print(viralRead.to_string())
-    print()
-  return
+  pprint(validChimera)
+  pprint(validUnmapped)
+
+  return {"validChimera": validChimera, "validUnmapped": validUnmapped}
 
 
 def parseCellrangerBam(bamfile, proviralFastaIds, proviralReads, hostReadsWithPotentialChimera, unmappedPotentialChimera, top_n = -1):
