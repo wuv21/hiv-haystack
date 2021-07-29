@@ -375,6 +375,9 @@ def parseUnmappedReads(readPairs, proviralSeqs, proviralLTRSeqs, clipMinLen = 11
       if viralSoftClip is not None:
         print("{}: soft clip detected in virus".format(viralRead.qname))
         pprint(viralSoftClip)
+        print(viralRead.to_string())
+        print(hostRead.to_string())
+        print()
 
     else:
       validUnmapped.append(readPair)
@@ -513,8 +516,8 @@ def main(args):
     # import files
     dualProviralAlignedReads = importProcessedBam(args.outputDir + "/" + outputFNs["proviralReads"],
       returnDict = True)
-    hostReadsWithPotentialChimera = importProcessedBam(args.outputDir + "/" + outputFNs["hostWithPotentialChimera"],
-      returnDict = True)
+   #  hostReadsWithPotentialChimera = importProcessedBam(args.outputDir + "/" + outputFNs["hostWithPotentialChimera"],
+   #    returnDict = True)
     unmappedPotentialChimera = importProcessedBam(args.outputDir + "/" +  outputFNs["umappedWithPotentialChimera"],
       returnDict = True)
 
@@ -523,10 +526,10 @@ def main(args):
   #############################
 
   # parse host reads with potential chimera
-  print("### Finding valid chimeras from host reads")
-  hostValidChimeras = parseHostReadsWithPotentialChimera(hostReadsWithPotentialChimera,
-    potentialLTR,
-    clipMinLen = args.LTRClipLen)
+  # print("### Finding valid chimeras from host reads")
+  # hostValidChimeras = parseHostReadsWithPotentialChimera(hostReadsWithPotentialChimera,
+  #   potentialLTR,
+  #   clipMinLen = args.LTRClipLen)
   
   print("### Finding valid chimeras from proviral reads")
   proviralValidChimeras = parseProviralReads(dualProviralAlignedReads, proviralSeqs)
@@ -537,9 +540,9 @@ def main(args):
   # write out processed files
   print("### Writing out processed bam files")
   cellrangerBam = pysam.AlignmentFile(args.bamfile, "rb")
-  writeBam(args.outputDir + "/" + outputFNs["hostWithValidChimera"],
-    cellrangerBam,
-    hostValidChimeras["validReads"])
+  # writeBam(args.outputDir + "/" + outputFNs["hostWithValidChimera"],
+  #   cellrangerBam,
+  #   hostValidChimeras["validReads"])
 
   writeBam(args.outputDir + "/" + outputFNs["validProviralReads"],
     cellrangerBam,
