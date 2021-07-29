@@ -114,6 +114,8 @@ def getSoftClip(read, clipMinLen, softClipPad):
   # clip can only be present at one end
   if clip5Present and clip3Present:
     return None
+  elif not clip5Present and not clip3Present:
+    return None
   else:
     clippedFragObj = {
       "clippedFrag": clippedFrag,
@@ -124,7 +126,7 @@ def getSoftClip(read, clipMinLen, softClipPad):
     return clippedFragObj
 
 
-def isSoftClipProviral(read, proviralLTRSeqs, clipMinLen = 11, softClipPad = 3):
+def isSoftClipProviral(read, proviralLTRSeqs, clipMinLen = 11, softClipPad = 3, ignoreOrient = False):
   clippedFragObj = getSoftClip(read, clipMinLen, softClipPad)
   
   # skip if no clipped fragment long enough is found
@@ -133,11 +135,12 @@ def isSoftClipProviral(read, proviralLTRSeqs, clipMinLen = 11, softClipPad = 3):
 
   # soft clip position has to match correct forward/reverse strandness of read
   # if 5', read has to be forward to not exit
-  if clippedFragObj["clip5Present"] and read.flag & 16:
-    return False
-  # if 3', read has to be reverse strand to not exit
-  elif clippedFragObj["clip3Present"] and read.flag & 32:
-    return False
+  if not ignoreOrient:
+    if clippedFragObj["clip5Present"] and read.flag & 16:
+      return False
+    # if 3', read has to be reverse strand to not exit
+    elif clippedFragObj["clip3Present"] and read.flag & 32:
+      return False
 
   strClippedFrag = str(clippedFragObj["clippedFrag"])
 
@@ -199,13 +202,15 @@ def isSoftClipProviral(read, proviralLTRSeqs, clipMinLen = 11, softClipPad = 3):
           hostAdjacentBp = str(read.seq)[len(strClippedFrag): len(strClippedFrag) + adjacentBpNum]
 
         if ltrEnd != "" and ltrEnd != hostAdjacentBp:
-          print("Viral clip not found at the end of LTR")
-          print(s, matches, read.seq, read.query_name)
+          print("{}: Viral clip not found at the end of LTR".format(read.query_name))
           continue
 
         # passes all checks!
-        print("successful match")
-        print(s, matches, read.seq, read.query_name)
+        print("{}: chimeric match found".format(read.query_name))
+        print(s, matches)
+        print(read.to_string())
+        print()
+
         hits[orient].append(matches)
         hits[orient + "Ids"].append(key + "___" + ltrType)
         foundHit = True
@@ -352,7 +357,11 @@ def parseUnmappedReads(readPairs, proviralSeqs, proviralLTRSeqs, clipMinLen = 11
 
     # host read soft clip
     elif hostReadSubs == 1:
-      potentialHits = isSoftClipProviral(hostRead, proviralLTRSeqs, clipMinLen)
+      tmp = getSoftClip(hostRead, clipMinLen, 3)
+      if tmp is not None:
+        print(tmp)
+      
+      potentialHits = isSoftClipProviral(hostRead, proviralLTRSeqs, clipMinLen, ignoreOrient = True)
       if potentialHits:
         validChimera.append(readPair)
       else:
@@ -362,16 +371,15 @@ def parseUnmappedReads(readPairs, proviralSeqs, proviralLTRSeqs, clipMinLen = 11
     elif viralReadSubs == 1:
       # TODO check that it is near start or end of sequence
 
-      viralSoftClip = getSoftClip(viralRead, clipMinLen)
+      viralSoftClip = getSoftClip(viralRead, clipMinLen, 3)
       if viralSoftClip is not None:
-        print("{}: soft clip detected in virus".format(viralRead.qname)))
+        print("{}: soft clip detected in virus".format(viralRead.qname))
         pprint(viralSoftClip)
 
     else:
       validUnmapped.append(readPair)
 
   pprint(validChimera)
-  pprint(validUnmapped)
 
   return {"validChimera": validChimera, "validUnmapped": validUnmapped}
 
@@ -468,21 +476,21 @@ def main(args):
   unmappedPotentialChimera = defaultdict(list)
 
   # recover all proviral "chromosome" names from partial fasta file used by Cellranger
-  print("Getting proviral records")
+  print("### Getting proviral records")
   proviralSeqs = defaultdict(lambda: [])
   proviralFastaIds = getProviralFastaIDs(args.viralFasta, proviralSeqs)
 
   # get possible LTR regions from fasta file
   if args.LTRmatches is not None:
-    print("Getting potential LTRs")
+    print("### Getting potential LTRs")
     potentialLTR = parseLTRMatches(args.LTRmatches, proviralSeqs)
   elif args.LTRpositions is not None:
-    print("LTR positions provided as {}".format(args.LTRpositions))
+    print("### LTR positions provided as {}".format(args.LTRpositions))
     potentialLTR = parseLTRMatches(args.LTRpositions, proviralSeqs, position = True)
   
   if not os.path.exists(args.outputDir + "/" + outputFNs["proviralReads"]):
     # parse BAM file
-    print("Parsing cellranger BAM (namesorted)")
+    print("### Parsing cellranger BAM (namesorted)")
     parseCellrangerBam(bamfile = args.bamfile,
       proviralFastaIds = proviralFastaIds,
       proviralReads = dualProviralAlignedReads,
@@ -491,7 +499,7 @@ def main(args):
       top_n = args.topNReads) #debugging
 
     # output BAM files
-    print("Writing out BAM files of parsed records")
+    print("### Writing out BAM files of parsed records")
 
     cellrangerBam = pysam.AlignmentFile(args.bamfile, "rb")
     writeBam(args.outputDir + "/" + outputFNs["proviralReads"], cellrangerBam, dualProviralAlignedReads)
@@ -500,30 +508,43 @@ def main(args):
     cellrangerBam.close()
 
   else:
-    print("Parsed BAM files already found. Importing these files to save time.")
+    print("### Parsed BAM files already found. Importing these files to save time.")
     
-    # import files...
-    dualProviralAlignedReads = importProcessedBam(args.outputDir + "/" + outputFNs["proviralReads"], returnDict = True)
-    #hostReadsWithPotentialChimera = importProcessedBam(args.outputDir + "/" + outputFNs["hostWithPotentialChimera"], returnDict = True)
-    unmappedPotentialChimera = importProcessedBam(args.outputDir + "/" +  outputFNs["umappedWithPotentialChimera"], returnDict = True)
+    # import files
+    dualProviralAlignedReads = importProcessedBam(args.outputDir + "/" + outputFNs["proviralReads"],
+      returnDict = True)
+    hostReadsWithPotentialChimera = importProcessedBam(args.outputDir + "/" + outputFNs["hostWithPotentialChimera"],
+      returnDict = True)
+    unmappedPotentialChimera = importProcessedBam(args.outputDir + "/" +  outputFNs["umappedWithPotentialChimera"],
+      returnDict = True)
+
+  #############################
+  # BEGIN DOWNSTREAM PROCESSING
+  #############################
 
   # parse host reads with potential chimera
-  # print("Finding valid chimeras from host reads")
-  # hostValidChimeras = parseHostReadsWithPotentialChimera(hostReadsWithPotentialChimera,
-  #   potentialLTR,
-  #   clipMinLen = args.LTRClipLen)
+  print("### Finding valid chimeras from host reads")
+  hostValidChimeras = parseHostReadsWithPotentialChimera(hostReadsWithPotentialChimera,
+    potentialLTR,
+    clipMinLen = args.LTRClipLen)
   
-  print("Finding valid chimeras from proviral reads")
+  print("### Finding valid chimeras from proviral reads")
   proviralValidChimeras = parseProviralReads(dualProviralAlignedReads, proviralSeqs)
 
-  print("Finding valid unmapped reads that might span between integration site")
+  print("### Finding valid unmapped reads that might span between integration site")
   validUnmappedReads = parseUnmappedReads(unmappedPotentialChimera, proviralSeqs, potentialLTR)
 
   # write out processed files
+  print("### Writing out processed bam files")
   cellrangerBam = pysam.AlignmentFile(args.bamfile, "rb")
-  #writeBam(args.outputDir + "/" + outputFNs["hostWithValidChimera"], cellrangerBam, hostValidChimeras["validReads"])
+  writeBam(args.outputDir + "/" + outputFNs["hostWithValidChimera"],
+    cellrangerBam,
+    hostValidChimeras["validReads"])
 
-  writeBam(args.outputDir + "/" + outputFNs["validProviralReads"], cellrangerBam, proviralValidChimeras["validReads"])
+  writeBam(args.outputDir + "/" + outputFNs["validProviralReads"],
+    cellrangerBam,
+    proviralValidChimeras["validReads"])
+
   writeBam(args.outputDir + "/" + outputFNs["validProviralReadsWithPotentialChimera"],
     cellrangerBam,
     proviralValidChimeras["potentialValidChimeras"])
