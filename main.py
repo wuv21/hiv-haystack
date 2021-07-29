@@ -249,6 +249,22 @@ def parseHostReadsWithPotentialChimera(readPairs, proviralLTRSeqs, clipMinLen):
   return returnVal
 
 
+def getAltAlign(read):
+  altAlign = read.get_tag("XA")
+
+  pprint(altAlign)
+
+
+def isSoftClipHost(read, proviralLTRSeqs, clipMinLen = 11, softClipPad = 3, ignoreOrient = False):
+  clippedFragObj = getSoftClip(read, clipMinLen, softClipPad)
+
+  # skip if no clipped fragment long enough is found
+  if clippedFragObj is None:
+    return False  
+  
+  return
+
+
 def parseProviralReads(readPairs, proviralSeqs, clipMinLen = 11):
   validReads = []
   potentialValidChimeras = []
@@ -269,6 +285,12 @@ def parseProviralReads(readPairs, proviralSeqs, clipMinLen = 11):
     if read1.is_unmapped or read2.is_unmapped:
       continue
     
+
+    if read1.has_tag("XA") or read2.has_tag("XA"):
+      print('ere')
+      getAltAlign(read1)
+      getAltAlign(read2)
+
     # add to allowed proviral reads...
     validReads.append(read1)
     validReads.append(read2)
@@ -292,7 +314,7 @@ def parseProviralReads(readPairs, proviralSeqs, clipMinLen = 11):
     read2Near3p = read2.reference_start >= refLen - read2.query_length - alignBuffer -1
 
     if not read1Near5p or not read2Near3p:
-      # print("{} is not close enough to LTR".format(read1.qname))
+      # print("{} is not close enough to LTR".format(read1.query_name))
       continue
 
     # verify length of substitution
@@ -341,13 +363,13 @@ def parseUnmappedReads(readPairs, proviralSeqs, proviralLTRSeqs, clipMinLen = 11
     
     # can't have mulutiple soft clips present
     if hostReadSubs + viralReadSubs > 1:
-      print("{}: Multiple soft clips in either/both reads, but still valid".format(hostRead.qname))
+      print("{}: Multiple soft clips in either/both reads, but still valid".format(hostRead.query_name))
       validUnmapped.append(readPair)
       continue
 
     # if no soft clips, just save as valid unmapped
     if hostReadSubs == 0 and viralReadSubs == 0:
-      print("{}: Valid unmapped but no integration site possible".format(hostRead.qname))
+      print("{}: Valid unmapped but no integration site possible".format(hostRead.query_name))
       validUnmapped.append(readPair)
       continue
 
@@ -373,7 +395,7 @@ def parseUnmappedReads(readPairs, proviralSeqs, proviralLTRSeqs, clipMinLen = 11
 
       viralSoftClip = getSoftClip(viralRead, clipMinLen, 3)
       if viralSoftClip is not None:
-        print("{}: soft clip detected in virus".format(viralRead.qname))
+        print("{}: soft clip detected in virus".format(viralRead.query_name))
         pprint(viralSoftClip)
 
     else:
@@ -407,17 +429,17 @@ def parseCellrangerBam(bamfile, proviralFastaIds, proviralReads, hostReadsWithPo
     # if read is properly mapped in a pair AND not proviral aligned AND there is soft clipping involved
     if (read.flag & 2) and (not refnameIsProviral) and (hasSoftClipAtEnd and softClipIsLongEnough):
       # move to chimera identification
-      hostReadsWithPotentialChimera[read.qname].append(read)
+      hostReadsWithPotentialChimera[read.query_name].append(read)
     
     # if there is a mate AND both are proviral only 
     elif refnameIsProviral and nextRefnameIsProviral:
       # save into proviral
-      proviralReads[read.qname].append(read)
+      proviralReads[read.query_name].append(read)
 
     # read or mate must be mapped AND either read or its mate must be proviral
     elif (not read.flag & 14) and (refnameIsProviral or nextRefnameIsProviral):
       # move to chimera identification
-      unmappedPotentialChimera[read.qname].append(read)
+      unmappedPotentialChimera[read.query_name].append(read)
     
     readIndex += 1
     
@@ -452,7 +474,7 @@ def importProcessedBam(bamfile, returnDict = True):
 
   for read in bam:
     if returnDict:
-      val[read.qname].append(read)
+      val[read.query_name].append(read)
     else:
       val.append(read)
 
