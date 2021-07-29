@@ -305,10 +305,10 @@ def parseProviralReads(readPairs, proviralSeqs, clipMinLen = 11):
       print(read2.to_string())
       print()
 
-      potentialvalidchimeras.append(read1)
-      potentialvalidchimeras.append(read2)
+      potentialValidChimeras.append(read1)
+      potentialValidChimeras.append(read2)
 
-    elif read2Near5p and read2.cigar[-1][0] == 4 and read2.cigar[-1][1] >= clipMinLen:
+    elif read2Near3p and read2.cigar[-1][0] == 4 and read2.cigar[-1][1] >= clipMinLen:
       print("Potential viral read 2 with host chimera. Please verify the following paired reads:")
       print(read1.to_string())
       print(read2.to_string())
@@ -342,22 +342,32 @@ def parseUnmappedReads(readPairs, proviralSeqs, proviralLTRSeqs, clipMinLen = 11
     hostReadSubs = hostRead.cigarstring.count("S")
     viralReadSubs = viralRead.cigarstring.count("S")
     
+    # can't have mulutiple soft clips present
     if hostReadSubs + viralReadSubs > 1:
       print("Multiple soft clips detected in host or viral read, but likely still valid")
       validUnmapped.append(readPair)
       continue
 
-    elif hostReadSubs == 0 and viralReadSubs == 0:
+    # if no soft clips, just save as valid unmapped
+    if hostReadSubs == 0 and viralReadSubs == 0:
       print("{} Valid unmapped but no integration site possible".format(hostRead.qname))
       print()
       validUnmapped.append(readPair)
       continue
 
-    elif hostReadSubs == 1 and viralReadSubs == 1:
+    # special case
+    if hostReadSubs == 1 and viralReadSubs == 1:
       print("Soft clip detected in both host and viral")
 
-    elif hostReadSubs == 1 and hostRead.cigar[0][0] == 4 or hostRead.cigar[-1][0] == 4:
-      print("Soft clip detected in host")
+    elif hostReadSubs == 1:
+      if hostRead.cigar[0][0] == 4 and hostRead.cigar[0][1] >= clipMinLen:
+        print("Possible valid soft clip on host read")
+      elif hostRead.cigar[-1][0] == 4 and hostRead.cigar[-1][1] >= clipMinLen:
+        print("Possible valid soft clip on host read")
+      else:
+        print("{}: Soft clip detected but either not at end or not long enough".format(hostRead.qname))
+        validUnmapped.append(readPair)
+        continue
 
     elif viralReadSubs == 1:
       print("Soft clip detected in virus")
