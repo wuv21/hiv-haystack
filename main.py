@@ -344,14 +344,13 @@ def parseUnmappedReads(readPairs, proviralSeqs, proviralLTRSeqs, clipMinLen = 11
     
     # can't have mulutiple soft clips present
     if hostReadSubs + viralReadSubs > 1:
-      print("Multiple soft clips detected in host or viral read, but likely still valid")
+      print("{}: Multiple soft clips in either/both reads, but still valid".format(hostRead.qname))
       validUnmapped.append(readPair)
       continue
 
     # if no soft clips, just save as valid unmapped
     if hostReadSubs == 0 and viralReadSubs == 0:
-      print("{} Valid unmapped but no integration site possible".format(hostRead.qname))
-      print()
+      print("{}: Valid unmapped but no integration site possible".format(hostRead.qname))
       validUnmapped.append(readPair)
       continue
 
@@ -370,6 +369,11 @@ def parseUnmappedReads(readPairs, proviralSeqs, proviralLTRSeqs, clipMinLen = 11
         continue
 
     elif viralReadSubs == 1:
+      # check that it is near start or end of sequence
+
+      if viralRead.cigar[0][0] == 4 and viralRead.cigar[0][1] >= clipMinLen:
+      
+      
       print("Soft clip detected in virus")
 
     else:
