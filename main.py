@@ -108,7 +108,7 @@ def getSoftClip(read, clipMinLen, softClipPad):
   if cigar[-1][0] == 4 and cigar[-1][1] >= clipMinLen:
     clipLen = cigar[-1][1]
     clippedFrag = read.seq[clipLen * -1: ]
-    adjacentFrag = read.seq[clipLen - softClipPad * -1: clipLen * -1]
+    adjacentFrag = read.seq[clipLen * -1 - softClipPad: clipLen * -1]
     clip3Present = True
 
   # clip can only be present at one end
