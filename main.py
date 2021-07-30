@@ -108,7 +108,7 @@ def getSoftClip(read, clipMinLen, softClipPad):
   if cigar[-1][0] == 4 and cigar[-1][1] >= clipMinLen:
     clipLen = cigar[-1][1]
     clippedFrag = read.seq[clipLen * -1: ]
-    adjacentFrag = read.seq[clipLen - softClipPad : clipLen * -1]
+    adjacentFrag = read.seq[clipLen - softClipPad * -1: clipLen * -1]
     clip3Present = True
 
   # clip can only be present at one end
@@ -250,18 +250,28 @@ def parseHostReadsWithPotentialChimera(readPairs, proviralLTRSeqs, clipMinLen):
 
 
 def getAltAlign(read):
-  altAlign = read.get_tag("XA")
+  if not read.has_tag("XA"):
+    return None
 
-  pprint(altAlign)
+  altAlignRaw = read.get_tag("XA")
+  
+  # remove last semicolon
+  altAlignRaw = altAlignRaw[:-1]
+
+  altAligns = altAlignRaw.split(";")
+  altAligns = [x.split(",") for x in altAligns]
+
+  return altAligns
 
 
-def isSoftClipHost(read, proviralLTRSeqs, clipMinLen = 11, softClipPad = 3, ignoreOrient = False):
+def isSoftClipHost(read, clipMinLen = 11, softClipPad = 3, ignoreOrient = False):
   clippedFragObj = getSoftClip(read, clipMinLen, softClipPad)
 
   # skip if no clipped fragment long enough is found
   if clippedFragObj is None:
     return False  
   
+
   return
 
 
@@ -285,12 +295,6 @@ def parseProviralReads(readPairs, proviralSeqs, clipMinLen = 11):
     if read1.is_unmapped or read2.is_unmapped:
       continue
     
-
-    if read1.has_tag("XA") or read2.has_tag("XA"):
-      print('ere')
-      getAltAlign(read1)
-      getAltAlign(read2)
-
     # add to allowed proviral reads...
     validReads.append(read1)
     validReads.append(read2)
@@ -305,6 +309,7 @@ def parseProviralReads(readPairs, proviralSeqs, clipMinLen = 11):
     read2Subs = read2.cigarstring.count("S")
     if read1Subs + read2Subs > 1:
       continue
+    
 
     # check position to make sure it is near start/end of LTR
     refLen = len(proviralSeqs[read1.reference_name][0])
