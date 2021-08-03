@@ -278,7 +278,7 @@ def getAltAlign(read):
   return altAligns
 
 
-def isSoftClipHost(read, clipMinLen = 11, softClipPad = 3, ignoreOrient = False):
+def isSoftClipHost(read, clipMinLen = 11, softClipPad = 3, ignoreOrient = False, useAlt = False):
   clippedFragObj = getSoftClip(read, clipMinLen, softClipPad)
 
   # skip if no clipped fragment long enough is found
@@ -288,7 +288,82 @@ def isSoftClipHost(read, clipMinLen = 11, softClipPad = 3, ignoreOrient = False)
   return
 
 
-def parseProviralReads(readPairs, proviralSeqs, proviralFastaIds, clipMinLen = 11):
+def separateCigarString(cigarstring):
+  cigarSep = re.findall(r"(\d+\w)", cigarstring)
+  cigarSepExpanded = [re.split(r"(\d+)", x)[1:3] for x in cigarSep]
+
+  return cigarSep
+
+
+def checkForChimera(read1, read2, refLen, clipMinLen = 11, useAlts = None, softClipPad = 3):
+  read1Info = {
+    "start": read1.reference_start,
+    "cigar": read1.cigar,
+    "cigarstring": read1.cigarstring
+  }
+  read2Info = {
+    "start": read2.reference_start,
+    "cigar": read2.cigar,
+    "cigarstring": read2.cigarstring
+  }
+
+  if useAlts is not None:
+    read1Alts = useAlts[0]
+    read2Alts = useAlts[1]
+
+    if not (len(read1Alts) == 1 and len(read2Alts) == 1):
+      return None
+    
+    read1Info["start"] = read1Alts[0][1].lstrip("[+-]")
+    read1Info["cigarstring"] = read1Alts[0][2]
+
+    read2Info["start"] = read2Alts[0][1].lstrip("[+-]")
+    read2Info["cigarstring"] = read2Alts[0][2]
+
+  # skip if both reads have a substitution
+  read1Subs = read1Info["cigarstring"].count("S")
+  read2Subs = read2Info["cigarstring"].count("S")
+  if read1Subs + read2Subs > 1:
+    return None
+  
+  read1Near5p = read1Info["start"] <= softClipPad
+  read2Near3p = read2Info["start"] >= refLen - read2.query_length - softClipPad - 1
+    
+  if not read1Near5p and not read2Near3p:
+    # print("{} is not close enough to LTR".format(read1.query_name))
+    return None
+
+  if useAlts is not None:
+    read1AltCigar = separateCigarString(read1Info["cigarstring"])
+    read2AltCigar = separateCigarString(read2Info["cigarstring"])
+    
+    isRead1WithEndClip = read1AltCigar[0][1] == "S" and int(read1AltCigar[0][0]) >= clipMinLen
+    isRead2WithEndClip = read2AltCigar[-1][1] == "S" and int(read2AltCigar[-1][0]) >= clipMinLen
+  else:
+    isRead1WithEndClip = read1.cigar[0][0] == 4 and read1.cigar[0][1] >= clipMinLen
+    isRead2WithEndClip = read2.cigar[-1][0] == 4 and read2.cigar[-1][1] >= clipMinLen
+
+  # verify length of substitution
+  if read1Near5p and isRead1WithEndClip:
+    print("Potential viral read 1 with host chimera. Please verify the following paired reads:")
+    print(read1.to_string())
+    print(read2.to_string())
+    print()
+
+    return read1
+
+  elif read2Near3p and isRead2WithEndClip:
+    print("Potential viral read 2 with host chimera. Please verify the following paired reads:")
+    print(read1.to_string())
+    print(read2.to_string())
+    print()
+
+    return read2
+
+  return None
+
+
+def parseProviralReads(readPairs, proviralSeqs, clipMinLen = 11):
   validReads = []
   potentialValidChimeras = []
 
@@ -312,55 +387,22 @@ def parseProviralReads(readPairs, proviralSeqs, proviralFastaIds, clipMinLen = 1
     validReads.append(read1)
     validReads.append(read2)
 
-    read1Alts = [alt for alt in getAltAlign(read1) if alt[0] == read1.reference_name]
-    read2Alts = [alt for alt in getAltAlign(read2) if alt[0] == read2.reference_name]
-    
-    # TODO
-
-
-
-    # move on to chimera analysis
     # rearrange depending on where alignment is
     if read1.reference_start > read2.reference_start:
       read1, read2 = read2, read1
-
-
-    # skip if both reads have a substitution
-    read1Subs = read1.cigarstring.count("S")
-    read2Subs = read2.cigarstring.count("S")
-    if read1Subs + read2Subs > 1:
-      continue
     
-
-    # check position to make sure it is near start/end of LTR
+    # move on to chimera analysis
     refLen = len(proviralSeqs[read1.reference_name][0])
-    alignBuffer = 3
-    
-    read1Near5p = read1.reference_start <= alignBuffer
-    read2Near3p = read2.reference_start >= refLen - read2.query_length - alignBuffer -1
+    read1Alts = [alt for alt in getAltAlign(read1) if alt[0] == read1.reference_name]
+    read2Alts = [alt for alt in getAltAlign(read2) if alt[0] == read2.reference_name]
 
-    if not read1Near5p or not read2Near3p:
-      # print("{} is not close enough to LTR".format(read1.query_name))
-      continue
+    potentialAltChimera = checkForChimera(read1, read2, refLen, clipMinLen = clipMinLen, useAlts = [read1Alts, read2Alts])
+    potentialChimera = checkForChimera(read1, read2, refLen, clipMinLen = clipMinLen, useAlts = False)
 
-    # verify length of substitution
-    if read1Near5p and read1.cigar[0][0] == 4 and read1.cigar[0][1] >= clipMinLen:
-      print("Potential viral read 1 with host chimera. Please verify the following paired reads:")
-      print(read1.to_string())
-      print(read2.to_string())
-      print()
-
-      potentialValidChimeras.append(read1)
-      potentialValidChimeras.append(read2)
-
-    elif read2Near3p and read2.cigar[-1][0] == 4 and read2.cigar[-1][1] >= clipMinLen:
-      print("Potential viral read 2 with host chimera. Please verify the following paired reads:")
-      print(read1.to_string())
-      print(read2.to_string())
-      print()
-
-      potentialValidChimeras.append(read1)
-      potentialValidChimeras.append(read2)
+    if potentialAltChimera is not None:
+      print('HERE')
+    elif potentialChimera is not None:
+      print("HERE 2")
 
   returnVal = {"validReads" : validReads, "potentialValidChimeras": potentialValidChimeras}
   return returnVal
@@ -589,10 +631,14 @@ def main(args):
   #  clipMinLen = args.LTRClipLen)
   
   print("### Finding valid chimeras from proviral reads")
-  proviralValidChimeras = parseProviralReads(dualProviralAlignedReads, proviralSeqs)
+  proviralValidChimeras = parseProviralReads(dualProviralAlignedReads,
+    proviralSeqs,
+    clipMinLen = args.LTRClipLen)
 
   print("### Finding valid unmapped reads that might span between integration site")
-  validUnmappedReads = parseUnmappedReads(unmappedPotentialChimera, proviralSeqs, potentialLTR)
+  validUnmappedReads = parseUnmappedReads(unmappedPotentialChimera,
+    proviralSeqs,
+    potentialLTR)
 
 
   #############################
