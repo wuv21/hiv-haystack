@@ -393,10 +393,16 @@ def parseProviralReads(readPairs, proviralSeqs, clipMinLen = 11):
     
     # move on to chimera analysis
     refLen = len(proviralSeqs[read1.reference_name][0])
-    read1Alts = [alt for alt in getAltAlign(read1) if alt[0] == read1.reference_name]
-    read2Alts = [alt for alt in getAltAlign(read2) if alt[0] == read2.reference_name]
+    read1AllAlts = getAltAlign(read1)
+    read2AllAlts = getAltAlign(read2)
 
-    potentialAltChimera = checkForChimera(read1, read2, refLen, clipMinLen = clipMinLen, useAlts = [read1Alts, read2Alts])
+    potentialAltChimera = None
+    if read1AllAlts is not None and read2AllAlts is not None:
+      read1Alts = [alt for alt in read1AllAlts if alt[0] == read1.reference_name]
+      read2Alts = [alt for alt in read2AllAlts if alt[0] == read2.reference_name]
+
+      potentialAltChimera = checkForChimera(read1, read2, refLen, clipMinLen = clipMinLen, useAlts = [read1Alts, read2Alts])
+
     potentialChimera = checkForChimera(read1, read2, refLen, clipMinLen = clipMinLen, useAlts = False)
 
     if potentialAltChimera is not None:
