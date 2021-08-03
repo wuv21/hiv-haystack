@@ -403,7 +403,7 @@ def parseProviralReads(readPairs, proviralSeqs, clipMinLen = 11):
 
       potentialAltChimera = checkForChimera(read1, read2, refLen, clipMinLen = clipMinLen, useAlts = [read1Alts, read2Alts])
 
-    potentialChimera = checkForChimera(read1, read2, refLen, clipMinLen = clipMinLen, useAlts = False)
+    potentialChimera = checkForChimera(read1, read2, refLen, clipMinLen = clipMinLen, useAlts = None)
 
     if potentialAltChimera is not None:
       print('HERE')
