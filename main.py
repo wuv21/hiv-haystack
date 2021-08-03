@@ -8,7 +8,6 @@ import csv
 import re
 from pprint import pprint
 
-
 def getProviralFastaIDs(fafile, recordSeqs):
   ids = []
   for record in SeqIO.parse(fafile, format = "fasta"):
@@ -286,11 +285,10 @@ def isSoftClipHost(read, clipMinLen = 11, softClipPad = 3, ignoreOrient = False)
   if clippedFragObj is None:
     return False  
   
-
   return
 
 
-def parseProviralReads(readPairs, proviralSeqs, clipMinLen = 11):
+def parseProviralReads(readPairs, proviralSeqs, proviralFastaIds, clipMinLen = 11):
   validReads = []
   potentialValidChimeras = []
 
@@ -314,11 +312,19 @@ def parseProviralReads(readPairs, proviralSeqs, clipMinLen = 11):
     validReads.append(read1)
     validReads.append(read2)
 
+    read1Alts = [alt for alt in getAltAlign(read1) if alt[0] == read1.reference_name]
+    read2Alts = [alt for alt in getAltAlign(read2) if alt[0] == read2.reference_name]
+    
+    # TODO
+
+
+
     # move on to chimera analysis
     # rearrange depending on where alignment is
     if read1.reference_start > read2.reference_start:
       read1, read2 = read2, read1
-    
+
+
     # skip if both reads have a substitution
     read1Subs = read1.cigarstring.count("S")
     read2Subs = read2.cigarstring.count("S")
@@ -520,6 +526,10 @@ def main(args):
   hostReadsWithPotentialChimera = defaultdict(list)
   unmappedPotentialChimera = defaultdict(list)
 
+  #############################
+  # Prepare LTR IDs and seqs
+  #############################
+
   # recover all proviral "chromosome" names from partial fasta file used by Cellranger
   print("### Getting proviral records")
   proviralSeqs = defaultdict(lambda: [])
@@ -532,7 +542,12 @@ def main(args):
   elif args.LTRpositions is not None:
     print("### LTR positions provided as {}".format(args.LTRpositions))
     potentialLTR = parseLTRMatches(args.LTRpositions, proviralSeqs, position = True)
-  
+
+
+  #############################
+  # Parse or load BAM files
+  #############################
+
   if not os.path.exists(args.outputDir + "/" + outputFNs["proviralReads"]):
     # parse BAM file
     print("### Parsing cellranger BAM (namesorted)")
@@ -558,26 +573,31 @@ def main(args):
     # import files
     dualProviralAlignedReads = importProcessedBam(args.outputDir + "/" + outputFNs["proviralReads"],
       returnDict = True)
-   #  hostReadsWithPotentialChimera = importProcessedBam(args.outputDir + "/" + outputFNs["hostWithPotentialChimera"],
-   #    returnDict = True)
+    #hostReadsWithPotentialChimera = importProcessedBam(args.outputDir + "/" + outputFNs["hostWithPotentialChimera"],
+    #  returnDict = True)
     unmappedPotentialChimera = importProcessedBam(args.outputDir + "/" +  outputFNs["umappedWithPotentialChimera"],
       returnDict = True)
 
   #############################
-  # BEGIN DOWNSTREAM PROCESSING
+  # Begin downstream proc
   #############################
 
   # parse host reads with potential chimera
   # print("### Finding valid chimeras from host reads")
-  # hostValidChimeras = parseHostReadsWithPotentialChimera(hostReadsWithPotentialChimera,
-  #   potentialLTR,
-  #   clipMinLen = args.LTRClipLen)
+  #hostValidChimeras = parseHostReadsWithPotentialChimera(hostReadsWithPotentialChimera,
+  #  potentialLTR,
+  #  clipMinLen = args.LTRClipLen)
   
   print("### Finding valid chimeras from proviral reads")
   proviralValidChimeras = parseProviralReads(dualProviralAlignedReads, proviralSeqs)
 
   print("### Finding valid unmapped reads that might span between integration site")
   validUnmappedReads = parseUnmappedReads(unmappedPotentialChimera, proviralSeqs, potentialLTR)
+
+
+  #############################
+  # Export proc files
+  #############################
 
   # write out processed files
   print("### Writing out processed bam files")
