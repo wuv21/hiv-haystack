@@ -314,10 +314,10 @@ def checkForChimera(read1, read2, refLen, clipMinLen = 11, useAlts = None, softC
     if not (len(read1Alts) == 1 and len(read2Alts) == 1):
       return None
     
-    read1Info["start"] = read1Alts[0][1].lstrip("[+-]")
+    read1Info["start"] = int(read1Alts[0][1].lstrip("[+-]"))
     read1Info["cigarstring"] = read1Alts[0][2]
 
-    read2Info["start"] = read2Alts[0][1].lstrip("[+-]")
+    read2Info["start"] = int(read2Alts[0][1].lstrip("[+-]"))
     read2Info["cigarstring"] = read2Alts[0][2]
 
   # skip if both reads have a substitution
