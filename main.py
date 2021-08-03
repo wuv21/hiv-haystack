@@ -35,7 +35,15 @@ def getLTRseq(seq, start, end):
 
 
 def parseLTRMatches(LTRargs, proviralSeqs, position = False, endBuffer = 20):
-  LTRdict = defaultdict(lambda: {"5p": [], "5pRevComp": [], "3p": [], "3pRevComp":[]})
+  LTRdict = defaultdict(lambda: {
+    "5p": None,
+    "5pRevComp": None,
+    "5pStart": None,
+    "5pEnd": None,
+    "3p": None,
+    "3pStart": None,
+    "3pEnd": None,
+    "3pRevComp": None})
 
   if position:
     marks = [int(x) for x in LTRargs.split(",")]
@@ -45,10 +53,14 @@ def parseLTRMatches(LTRargs, proviralSeqs, position = False, endBuffer = 20):
       ltr5p = getLTRseq(proviralSeq, marks[0], marks[1])
       ltr3p = getLTRseq(proviralSeq, marks[2], marks[3])
 
-      LTRdict[k]["5p"].append(ltr5p)
-      LTRdict[k]["5pRevComp"].append(ltr5p.reverse_complement())
-      LTRdict[k]["3p"].append(ltr3p)
-      LTRdict[k]["3pRevComp"].append(ltr3p.reverse_complement())
+      LTRdict[k]["5p"] = ltr5p
+      LTRdict[k]["5pStart"] = marks[0]
+      LTRdict[k]["5pEnd"] = marks[1]
+      LTRdict[k]["5pRevComp"] = ltr5p.reverse_complement()
+      LTRdict[k]["3p"] = ltr3p
+      LTRdict[k]["5pStart"] = marks[0]
+      LTRdict[k]["5pEnd"] = marks[1]
+      LTRdict[k]["3pRevComp"] = ltr3p.reverse_complement()
 
   else:
     with open(LTRargs, "r") as fhandle:
@@ -74,12 +86,16 @@ def parseLTRMatches(LTRargs, proviralSeqs, position = False, endBuffer = 20):
           continue
         elif sstart < endBuffer:
           seq = getLTRseq(proviralSeqs[subjID][0], 1, send)
-          LTRdict[subjID]["5p"].append(seq)
-          LTRdict[subjID]["5pRevComp"].append(seq.reverse_complement())
+          LTRdict[subjID]["5p"] = seq
+          LTRdict[subjID]["5pStart"] = 1
+          LTRdict[subjID]["5pEnd"] = send
+          LTRdict[subjID]["5pRevComp"] = seq.reverse_complement()
         elif slen - send < endBuffer:
           seq = getLTRseq(proviralSeqs[subjID][0], sstart, slen)
-          LTRdict[subjID]["3p"].append(seq)
-          LTRdict[subjID]["3pRevComp"].append(seq.reverse_complement())
+          LTRdict[subjID]["3p"] = seq
+          LTRdict[subjID]["3pStart"] = sstart
+          LTRdict[subjID]["3pEnd"] = slen          
+          LTRdict[subjID]["3pRevComp"] = seq.reverse_complement()
 
   return LTRdict
 
@@ -169,51 +185,50 @@ def isSoftClipProviral(read, proviralLTRSeqs, clipMinLen = 11, softClipPad = 3, 
     keyPair = proviralLTRSeqs[key]
 
     for ltrType in allowedLTRKeys:
-      ltrTypeSeqs = keyPair[ltrType]
-      if len(ltrTypeSeqs) == 0:
+      s = keyPair[ltrType]
+      if s is None:
         continue
 
       # find orientation
       orient = "plus" if ltrType == "5p" or ltrType == "3p" else "minus"
 
-      for s in ltrTypeSeqs:
-        matches = [x.start() for x in re.finditer(strClippedFrag, str(s))]
-        if len(matches) == 0:
-          continue
+      matches = [x.start() for x in re.finditer(strClippedFrag, str(s))]
+      if len(matches) == 0:
+        continue
 
-        ltrLen = len(str(s))
-        # check if match is within soft buffer zone
-        # needs to pass min(matches) <= softClipPad or max(matches) + len(strClippedFrag) >= ltrLen - softClipPad:
-        if (ltrType == "5p" or ltrType == "3pRevComp") and min(matches) > softClipPad:
-          continue
-        elif (ltrType == "3p" or ltrType == "5pRevComp") and max(matches) + len(strClippedFrag) < ltrLen - softClipPad:
-          continue
+      ltrLen = len(str(s))
+      # check if match is within soft buffer zone
+      # needs to pass min(matches) <= softClipPad or max(matches) + len(strClippedFrag) >= ltrLen - softClipPad:
+      if (ltrType == "5p" or ltrType == "3pRevComp") and min(matches) > softClipPad:
+        continue
+      elif (ltrType == "3p" or ltrType == "5pRevComp") and max(matches) + len(strClippedFrag) < ltrLen - softClipPad:
+        continue
 
-        # check if the adjacent host clips could have also been aligned to the viral LTR,
-        # thus explaining the lack of viral clip not being at either end of LTR
-        ltrEnd = ""
-        if (ltrType == "5p" or ltrType == "3pRevComp") and min(matches) != 0:
-          ltrEnd = str(s)[0:min(matches)]
-          hostAdjacentBp = str(read.seq)[-len(strClippedFrag) - len(ltrEnd): -len(strClippedFrag)]
+      # check if the adjacent host clips could have also been aligned to the viral LTR,
+      # thus explaining the lack of viral clip not being at either end of LTR
+      ltrEnd = ""
+      if (ltrType == "5p" or ltrType == "3pRevComp") and min(matches) != 0:
+        ltrEnd = str(s)[0:min(matches)]
+        hostAdjacentBp = str(read.seq)[-len(strClippedFrag) - len(ltrEnd): -len(strClippedFrag)]
 
-        elif (ltrType == "3p" or ltrType == "5pRevComp") and max(matches) != ltrLen - softClipPad:
-          adjacentBpNum = ltrLen - max(matches) - len(strClippedFrag)
-          ltrEnd = str(s)[max(matches) + len(strClippedFrag): ltrLen]
-          hostAdjacentBp = str(read.seq)[len(strClippedFrag): len(strClippedFrag) + adjacentBpNum]
+      elif (ltrType == "3p" or ltrType == "5pRevComp") and max(matches) != ltrLen - softClipPad:
+        adjacentBpNum = ltrLen - max(matches) - len(strClippedFrag)
+        ltrEnd = str(s)[max(matches) + len(strClippedFrag): ltrLen]
+        hostAdjacentBp = str(read.seq)[len(strClippedFrag): len(strClippedFrag) + adjacentBpNum]
 
-        if ltrEnd != "" and ltrEnd != hostAdjacentBp:
-          print("{}: Viral clip not found at the end of LTR".format(read.query_name))
-          continue
+      if ltrEnd != "" and ltrEnd != hostAdjacentBp:
+        print("{}: Viral clip not found at the end of LTR".format(read.query_name))
+        continue
 
-        # passes all checks!
-        print("{}: chimeric match found".format(read.query_name))
-        print(s, matches)
-        print(read.to_string())
-        print()
+      # passes all checks!
+      print("{}: chimeric match found".format(read.query_name))
+      print(s, matches)
+      print(read.to_string())
+      print()
 
-        hits[orient].append(matches)
-        hits[orient + "Ids"].append(key + "___" + ltrType)
-        foundHit = True
+      hits[orient].append(matches)
+      hits[orient + "Ids"].append(key + "___" + ltrType)
+      foundHit = True
 
   # can only be plus orientation OR minus orientation only
   if foundHit and len(hits["plus"]) != 0 and len(hits["minus"]) == 0:
