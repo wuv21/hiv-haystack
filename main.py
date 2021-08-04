@@ -99,7 +99,7 @@ def parseLTRMatches(LTRargs, proviralSeqs, position = False, endBuffer = 20):
   return LTRdict
 
 
-def getSoftClip(read, clipMinLen, softClipPad):
+def getSoftClip(read, clipMinLen, softClipPad, useAlt = None):
   # cutoff same as epiVIA
   cigar = read.cigartuples
   clippedFrag = Seq("")
@@ -108,23 +108,37 @@ def getSoftClip(read, clipMinLen, softClipPad):
   clip5Present = False
   clip3Present = False
 
-  # loop through cigar to make sure there's only 1 soft clip
-  if read.cigarstring.count("S") > 1:
-    return None
+  if useAlt is None:
+    # loop through cigar to make sure there's only 1 soft clip
+    if read.cigarstring.count("S") > 1:
+      return None
 
-  # clip is at 5' position
-  if cigar[0][0] == 4 and cigar[0][1] >= clipMinLen:
-    clipLen = cigar[0][1]
-    clippedFrag = read.seq[0:clipLen]
-    adjacentFrag = read.seq[clipLen:clipLen + softClipPad]
+    passing5p = cigar[0][0] == 4 and cigar[0][1] >= clipMinLen
+    passing3p = cigar[-1][0] == 4 and cigar[-1][1] >= clipMinLen
+
+    clipLen5p = cigar[0][1]
+    clipLen3p = cigar[-1][1]
+
+  else:
+    if useAlt["cigarstring"].count("S") > 1:
+      return None
+    
+    readAltCigar = separateCigarString(useAlt["cigarstring"])
+    passing5p = readAltCigar[0][1] == "S" and readAltCigar[0][0] >= clipMinLen
+    passing3p = readAltCigar[-1][1] == "S" and readAltCigar[-1][0] >= clipMinLen
+
+    clipLen5p = readAltCigar[0][0]
+    clipLen3p = readAltCigar[-1][0]
+
+  if passing5p:
+    clippedFrag = read.seq[0:clipLen5p]
+    adjacentFrag = read.seq[clipLen5p:clipLen5p + softClipPad]
     clip5Present = True
-
-  # clip at 3' position
-  if cigar[-1][0] == 4 and cigar[-1][1] >= clipMinLen:
-    clipLen = cigar[-1][1]
-    clippedFrag = read.seq[clipLen * -1: ]
-    adjacentFrag = read.seq[clipLen * -1 - softClipPad: clipLen * -1]
-    clip3Present = True
+  
+  if passing3p:
+    clippedFrag = read.seq[clipLen3p * -1: ]
+    adjacentFrag = read.seq[clipLen3p * -1 - softClipPad: clipLen3p * -1]
+    clip3Present = True    
 
   # clip can only be present at one end
   if clip5Present and clip3Present:
@@ -135,6 +149,7 @@ def getSoftClip(read, clipMinLen, softClipPad):
     clippedFragObj = {
       "clippedFrag": clippedFrag,
       "adjacentFrag": adjacentFrag,
+      "useAlt": useAlt,
       "clip5Present": clip5Present,
       "clip3Present": clip3Present}
 
@@ -320,45 +335,54 @@ def checkForChimera(read1, read2, refLen, clipMinLen = 11, useAlts = None, softC
     read2Info["start"] = int(read2Alts[0][1].lstrip("[+-]"))
     read2Info["cigarstring"] = read2Alts[0][2]
 
-  # skip if both reads have a substitution
-  read1Subs = read1Info["cigarstring"].count("S")
-  read2Subs = read2Info["cigarstring"].count("S")
-  if read1Subs + read2Subs > 1:
-    return None
+    read1Clip = getSoftClip(read1, clipMinLen, softClipPad, useAlt = read1Info)
+    read2Clip = getSoftClip(read2, clipMinLen, softClipPad, useAlt = read2Info)
   
+  else:
+    read1Clip = getSoftClip(read1, clipMinLen, softClipPad)
+    read2Clip = getSoftClip(read2, clipMinLen, softClipPad)
+
   read1Near5p = read1Info["start"] <= softClipPad
   read2Near3p = read2Info["start"] >= refLen - read2.query_length - softClipPad - 1
-    
+  
+  # proximity check
   if not read1Near5p and not read2Near3p:
     # print("{} is not close enough to LTR".format(read1.query_name))
     return None
 
-  if useAlts is not None:
-    read1AltCigar = separateCigarString(read1Info["cigarstring"])
-    read2AltCigar = separateCigarString(read2Info["cigarstring"])
-    
-    isRead1WithEndClip = read1AltCigar[0][1] == "S" and int(read1AltCigar[0][0]) >= clipMinLen
-    isRead2WithEndClip = read2AltCigar[-1][1] == "S" and int(read2AltCigar[-1][0]) >= clipMinLen
-  else:
-    isRead1WithEndClip = read1.cigar[0][0] == 4 and read1.cigar[0][1] >= clipMinLen
-    isRead2WithEndClip = read2.cigar[-1][0] == 4 and read2.cigar[-1][1] >= clipMinLen
+  # can't have multiple soft clips in both reads
+  if read1Clip is not None and read2Clip is not None:
+    return None
 
   # verify length of substitution
-  if read1Near5p and isRead1WithEndClip:
+  returnObj = {
+    "chimericRead": None,
+    "nonChimericRead": None,
+    "hostSoftClip": None
+  }
+  if read1Near5p and read1Clip is not None:
     print("Potential viral read 1 with host chimera. Please verify the following paired reads:")
     print(read1.to_string())
     print(read2.to_string())
     print()
 
-    return read1
+    returnObj["chimericRead"] = read1
+    returnObj["nonChimericRead"] = read2
+    returnObj["hostSoftClip"] = read1Clip
 
-  elif read2Near3p and isRead2WithEndClip:
+    return returnObj
+
+  elif read2Near3p and read2Clip is not None:
     print("Potential viral read 2 with host chimera. Please verify the following paired reads:")
     print(read1.to_string())
     print(read2.to_string())
     print()
 
-    return read2
+    returnObj["chimericRead"] = read1
+    returnObj["nonChimericRead"] = read2
+    returnObj["hostSoftClip"] = read2Clip
+
+    return returnObj
 
   return None
 
