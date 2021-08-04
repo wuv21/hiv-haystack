@@ -124,11 +124,11 @@ def getSoftClip(read, clipMinLen, softClipPad, useAlt = None):
       return None
     
     readAltCigar = separateCigarString(useAlt["cigarstring"])
-    passing5p = readAltCigar[0][1] == "S" and readAltCigar[0][0] >= clipMinLen
-    passing3p = readAltCigar[-1][1] == "S" and readAltCigar[-1][0] >= clipMinLen
+    passing5p = readAltCigar[0][1] == "S" and int(readAltCigar[0][0]) >= clipMinLen
+    passing3p = readAltCigar[-1][1] == "S" and int(readAltCigar[-1][0]) >= clipMinLen
 
-    clipLen5p = readAltCigar[0][0]
-    clipLen3p = readAltCigar[-1][0]
+    clipLen5p = int(readAltCigar[0][0])
+    clipLen3p = int(readAltCigar[-1][0])
 
   if passing5p:
     clippedFrag = read.seq[0:clipLen5p]
@@ -370,6 +370,7 @@ def checkForChimera(read1, read2, refLen, clipMinLen = 11, useAlts = None, softC
     returnObj["nonChimericRead"] = read2
     returnObj["hostSoftClip"] = read1Clip
 
+    pprint(returnOjb)
     return returnObj
 
   elif read2Near3p and read2Clip is not None:
@@ -381,7 +382,8 @@ def checkForChimera(read1, read2, refLen, clipMinLen = 11, useAlts = None, softC
     returnObj["chimericRead"] = read1
     returnObj["nonChimericRead"] = read2
     returnObj["hostSoftClip"] = read2Clip
-
+    
+    pprint(returnObj)
     return returnObj
 
   return None
