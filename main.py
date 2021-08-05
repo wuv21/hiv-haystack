@@ -7,6 +7,7 @@ import argparse
 import os
 import csv
 import re
+import subprocess
 from pprint import pprint
 from termcolor import cprint
 
@@ -419,6 +420,23 @@ def writeFasta(chimeras, hostClipFastaFn):
   SeqIO.write(records, hostClipFastaFn, "fasta")
 
 
+def alignClipToHost(fafile, hostGenomeIndex, LTRclipLen):
+  outputSam = fafile + ".sam"
+  command = "bwa mem -T {quality} -k {seed} -a -Y  -q {index} {fa} -o {sam}".format(
+      index = hostGenomeIndex,
+      fa = fafile,
+      sam = outputSam,
+      quality = LTRclipLen,
+      seed = LTRclipLen - 2)
+
+  child = subprocess.Popen(command, shell = True)
+  child.wait()
+  if child.poll() != 0:
+    raise Exception("Error with alignment")
+  
+  return "done"
+
+
 def parseProviralReads(readPairs, proviralSeqs, hostClipFastaFn, clipMinLen = 11):
   validReads = []
   potentialValidChimeras = []
@@ -627,7 +645,8 @@ def main(args):
     "umappedWithPotentialChimera": "unmappedWithPotentialChimera.bam",
     "hostWithValidChimera": "hostWithValidChimera.bam",
     "validProviralReads": "validProviralReads.bam",
-    "validProviralReadsWithPotentialChimera": "validProviralReadsWithPotentialChimera.bam"
+    "validProviralReadsWithPotentialChimera": "validProviralReadsWithPotentialChimera.bam",
+    "viralReadHostClipFasta": "viralReadHostClipFastaFn.fa"
   }
   
   # set up initial dictionaries
@@ -698,16 +717,17 @@ def main(args):
   #  clipMinLen = args.LTRClipLen)
   
   printGreen("Finding valid chimeras from proviral reads")
-  viralReadHostClipFastaFn = "viralReadHostClipFastaFn.fa"
   proviralValidChimeras = parseProviralReads(
     readPairs = dualProviralAlignedReads,
     proviralSeqs = proviralSeqs,
-    hostClipFastaFn = viralReadHostClipFastaFn,
+    hostClipFastaFn = outputFNs["viralReadHostClipFasta"],
     clipMinLen = args.LTRClipLen)
     
   printGreen("Found {} chimera(s). Aligning now to hg38.".format(len(proviralValidChimeras["potentialValidChimeras"])))
   # TODO call alignment
-
+  alignClipToHost(fafile=outputFNs["viralReadHostClipFasta"],
+    hostGenomeIndex = args.hostGenomeIndex,
+    LTRclipLen = args.LTRclipLen)
 
   printGreen("Finding valid unmapped reads that might span between integration site")
   validUnmappedReads = parseUnmappedReads(unmappedPotentialChimera,
@@ -762,6 +782,9 @@ if __name__ == '__main__':
     default = 11,
     type = int,
     help = "Number of bp to extend into LTR from a chimeric fragment")
+  parser.add_argument("--hostGenomeIndex",
+    help = "Prefix of bwa indexed host reference genome (NO provirus sequences included)")
+    
   args = parser.parse_args()
 
   if not os.path.exists(args.outputDir):
