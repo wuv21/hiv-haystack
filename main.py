@@ -8,6 +8,11 @@ import os
 import csv
 import re
 from pprint import pprint
+from termcolor import cprint
+
+printRed = lambda x: cprint(x, "red")
+printGreen = lambda x: cprint(x, "green")
+printCyan = lambda x: cprint(x, "cyan")
 
 def getProviralFastaIDs(fafile, recordSeqs):
   ids = []
@@ -635,16 +640,16 @@ def main(args):
   #############################
 
   # recover all proviral "chromosome" names from partial fasta file used by Cellranger
-  print("### Getting proviral records")
+  printGreen("Getting proviral records")
   proviralSeqs = defaultdict(lambda: [])
   proviralFastaIds = getProviralFastaIDs(args.viralFasta, proviralSeqs)
 
   # get possible LTR regions from fasta file
   if args.LTRmatches is not None:
-    print("### Getting potential LTRs")
+    printGreen("Getting potential LTRs")
     potentialLTR = parseLTRMatches(args.LTRmatches, proviralSeqs)
   elif args.LTRpositions is not None:
-    print("### LTR positions provided as {}".format(args.LTRpositions))
+    printGreen("LTR positions provided as {}".format(args.LTRpositions))
     potentialLTR = parseLTRMatches(args.LTRpositions, proviralSeqs, position = True)
 
 
@@ -654,7 +659,7 @@ def main(args):
 
   if not os.path.exists(args.outputDir + "/" + outputFNs["proviralReads"]):
     # parse BAM file
-    print("### Parsing cellranger BAM (namesorted)")
+    printGreen("Parsing cellranger BAM (namesorted)")
     parseCellrangerBam(bamfile = args.bamfile,
       proviralFastaIds = proviralFastaIds,
       proviralReads = dualProviralAlignedReads,
@@ -663,7 +668,7 @@ def main(args):
       top_n = args.topNReads) #debugging
 
     # output BAM files
-    print("### Writing out BAM files of parsed records")
+    printGreen("Writing out BAM files of parsed records")
 
     cellrangerBam = pysam.AlignmentFile(args.bamfile, "rb")
     writeBam(args.outputDir + "/" + outputFNs["proviralReads"], cellrangerBam, dualProviralAlignedReads)
@@ -672,13 +677,13 @@ def main(args):
     cellrangerBam.close()
 
   else:
-    print("### Parsed BAM files already found. Importing these files to save time.")
+    printGreen("Parsed BAM files already found. Importing these files to save time.")
     
     # import files
     dualProviralAlignedReads = importProcessedBam(args.outputDir + "/" + outputFNs["proviralReads"],
       returnDict = True)
-    hostReadsWithPotentialChimera = importProcessedBam(args.outputDir + "/" + outputFNs["hostWithPotentialChimera"],
-      returnDict = True)
+    #hostReadsWithPotentialChimera = importProcessedBam(args.outputDir + "/" + outputFNs["hostWithPotentialChimera"],
+     # returnDict = True)
     unmappedPotentialChimera = importProcessedBam(args.outputDir + "/" +  outputFNs["umappedWithPotentialChimera"],
       returnDict = True)
 
@@ -687,12 +692,12 @@ def main(args):
   #############################
 
   # parse host reads with potential chimera
-  print("### Finding valid chimeras from host reads")
-  hostValidChimeras = parseHostReadsWithPotentialChimera(hostReadsWithPotentialChimera,
-    potentialLTR,
-    clipMinLen = args.LTRClipLen)
+  #printGreen("Finding valid chimeras from host reads")
+  #hostValidChimeras = parseHostReadsWithPotentialChimera(hostReadsWithPotentialChimera,
+  #  potentialLTR,
+  #  clipMinLen = args.LTRClipLen)
   
-  print("### Finding valid chimeras from proviral reads")
+  printGreen("Finding valid chimeras from proviral reads")
   viralReadHostClipFastaFn = "viralReadHostClipFastaFn.fa"
   proviralValidChimeras = parseProviralReads(
     readPairs = dualProviralAlignedReads,
@@ -700,11 +705,11 @@ def main(args):
     hostClipFastaFn = viralReadHostClipFastaFn,
     clipMinLen = args.LTRClipLen)
     
-  print("### Found {} chimera(s). Aligning now to hg38.".format(len(proviralValidChimeras["potentialValidChimeras"])))
+  printGreen("Found {} chimera(s). Aligning now to hg38.".format(len(proviralValidChimeras["potentialValidChimeras"])))
   # TODO call alignment
 
 
-  print("### Finding valid unmapped reads that might span between integration site")
+  printGreen("Finding valid unmapped reads that might span between integration site")
   validUnmappedReads = parseUnmappedReads(unmappedPotentialChimera,
     proviralSeqs,
     potentialLTR)
@@ -715,7 +720,7 @@ def main(args):
   #############################
 
   # write out processed files
-  print("### Writing out processed bam files")
+  printGreen("Writing out processed bam files")
   cellrangerBam = pysam.AlignmentFile(args.bamfile, "rb")
   # writeBam(args.outputDir + "/" + outputFNs["hostWithValidChimera"],
   #   cellrangerBam,
