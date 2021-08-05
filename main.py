@@ -435,7 +435,24 @@ def alignClipToHost(fafile, hostGenomeIndex, hostClipLen = 17):
   if child.poll() != 0:
     raise Exception("Error with alignment")
   
-  return "done"
+  validIntSites = defaultdict(list)
+  qnamesWithMultipleHits = []
+  alignment = pysam.AlignmentFile(outputSam, "r")
+  for rec in alignment:
+    if rec.mapq == 0:
+      continue
+
+    if len(validIntSites[rec.qname]) > 0:
+      printRed("{}: integration site can't be found due to multiple hits in host genome".format(rec.qname))
+      validIntSites.pop(rec.qname)
+      qnamesWithMultipleHits.append[rec.qname]
+      continue
+    elif rec.qname in qnamesWithMultipleHits:
+      continue
+    
+    validIntSites[rec.qname].append(rec)
+
+  return validIntSites
 
 
 def parseProviralReads(readPairs, proviralSeqs, hostClipFastaFn, clipMinLen = 17):
@@ -729,9 +746,12 @@ def main(args):
     clipMinLen = args.hostClipLen)
     
   printGreen("Found {} chimera(s). Aligning now to hg38.".format(len(proviralValidChimeras["potentialValidChimeras"])))
-  alignClipToHost(fafile=outputFNs["viralReadHostClipFasta"],
+  validIntegrationSites = alignClipToHost(fafile=outputFNs["viralReadHostClipFasta"],
     hostGenomeIndex = args.hostGenomeIndex,
     hostClipLen = args.hostClipLen)
+
+  printCyan(validIntegrationSites)
+
 
   printGreen("Finding valid unmapped reads that might span between integration site")
   validUnmappedReads = parseUnmappedReads(unmappedPotentialChimera,
