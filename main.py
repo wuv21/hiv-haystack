@@ -1,6 +1,7 @@
 import pysam
 from Bio import SeqIO
 from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
 from collections import defaultdict
 import argparse
 import os
@@ -293,16 +294,6 @@ def getAltAlign(read):
   return altAligns
 
 
-def isSoftClipHost(read, clipMinLen = 11, softClipPad = 3, ignoreOrient = False, useAlt = False):
-  clippedFragObj = getSoftClip(read, clipMinLen, softClipPad)
-
-  # skip if no clipped fragment long enough is found
-  if clippedFragObj is None:
-    return False  
-  
-  return
-
-
 def separateCigarString(cigarstring):
   cigarSep = re.findall(r"(\d+\w)", cigarstring)
   cigarSepExpanded = [re.split(r"(\d+)", x)[1:3] for x in cigarSep]
@@ -310,7 +301,7 @@ def separateCigarString(cigarstring):
   return cigarSep
 
 
-def checkForChimera(read1, read2, refLen, clipMinLen = 11, useAlts = None, softClipPad = 3):
+def checkForChimera(read1, read2, refLen, proviralSeqs, clipMinLen = 11, useAlts = None, softClipPad = 3):
   read1Info = {
     "start": read1.reference_start,
     "cigar": read1.cigar,
@@ -361,35 +352,67 @@ def checkForChimera(read1, read2, refLen, clipMinLen = 11, useAlts = None, softC
     "hostSoftClip": None
   }
   if read1Near5p and read1Clip is not None:
-    print("Potential viral read 1 with host chimera. Please verify the following paired reads:")
-    print(read1.to_string())
-    print(read2.to_string())
-    print()
-
     returnObj["chimericRead"] = read1
     returnObj["nonChimericRead"] = read2
     returnObj["hostSoftClip"] = read1Clip
 
-    pprint(returnOjb)
-    return returnObj
-
   elif read2Near3p and read2Clip is not None:
-    print("Potential viral read 2 with host chimera. Please verify the following paired reads:")
-    print(read1.to_string())
-    print(read2.to_string())
-    print()
-
     returnObj["chimericRead"] = read1
     returnObj["nonChimericRead"] = read2
     returnObj["hostSoftClip"] = read2Clip
+  
+  else:
+    return None
+
+  # TODO check adjacent if ltr sequence isn't at end...
+  clip = returnObj["hostSoftClip"]["clippedFrag"]
+  if read1Clip is not None:
+    provirusStart = read1Info["start"]
+
+    clipPartial = clip[-1 * (provirusStart - 1): ]
+    provirusActual = proviralSeqs[read1.reference_name][0][1:provirusStart]
+
+    if provirusStart == 1:
+      return returnObj
+    elif provirusStart != 1 and clipPartial == provirusActual:
+      return returnObj
+
+  elif read2Clip is not None:
+    provirusStart = read2Info["start"]
+    fragmentLen = len(clip)
+    readProviralLen = read2.qlen - fragmentLen
+
+    proviralEnd = len(proviralSeqs[read1.reference_name][0]) - 1
+    reqProviralEnd = proviralEnd - readProviralLen
+
+    clipPartial = clip[:reqProviralEnd - proviralEnd]
+    provirusActual = proviralSeqs[read2.reference_name][0][-1 * (reqProviralEnd - proviralEnd):]
+
+    print("{} {} {}".format(provirusStart, proviralEnd, readProviralLen))
+
+    if provirusStart == reqProviralEnd:
+      return returnObj
     
-    pprint(returnObj)
-    return returnObj
+    elif provirusStart != reqProviralEnd and clipPartial == provirusActual:
+      return returnObj
 
   return None
 
 
-def parseProviralReads(readPairs, proviralSeqs, clipMinLen = 11):
+def writeFasta(chimeras, hostClipFastaFn):
+  records = []
+  for chimera in chimeras:
+    record = SeqRecord(
+      id = chimera["chimericRead"].qname,
+      seq = chimera["hostSoftClip"].clippedFrag
+    )
+
+    records.append(record)
+
+  SeqIO.write(records, hostClipFastaFn, "fasta")
+
+
+def parseProviralReads(readPairs, proviralSeqs, hostClipFastaFn, clipMinLen = 11):
   validReads = []
   potentialValidChimeras = []
 
@@ -427,14 +450,20 @@ def parseProviralReads(readPairs, proviralSeqs, clipMinLen = 11):
       read1Alts = [alt for alt in read1AllAlts if alt[0] == read1.reference_name]
       read2Alts = [alt for alt in read2AllAlts if alt[0] == read2.reference_name]
 
-      potentialAltChimera = checkForChimera(read1, read2, refLen, clipMinLen = clipMinLen, useAlts = [read1Alts, read2Alts])
+      potentialAltChimera = checkForChimera(read1, read2, refLen, proviralSeqs = proviralSeqs,
+        clipMinLen = clipMinLen, useAlts = [read1Alts, read2Alts])
 
-    potentialChimera = checkForChimera(read1, read2, refLen, clipMinLen = clipMinLen, useAlts = None)
+    potentialChimera = checkForChimera(read1, read2, refLen, proviralSeqs = proviralSeqs,
+      clipMinLen = clipMinLen, useAlts = None)
 
-    if potentialAltChimera is not None:
-      print('HERE')
+    if potentialAltChimera is not None and potentialChimera is not None:
+      print("Warning...")
+    elif potentialAltChimera is not None:
+      potentialValidChimeras.append(potentialAltChimera)
     elif potentialChimera is not None:
-      print("HERE 2")
+      potentialValidChimeras.append(potentialChimera)
+
+  writeFasta(potentialValidChimeras, hostClipFastaFn)
 
   returnVal = {"validReads" : validReads, "potentialValidChimeras": potentialValidChimeras}
   return returnVal
@@ -663,9 +692,17 @@ def main(args):
   #  clipMinLen = args.LTRClipLen)
   
   print("### Finding valid chimeras from proviral reads")
-  proviralValidChimeras = parseProviralReads(dualProviralAlignedReads,
-    proviralSeqs,
+  viralReadHostClipFastaFn = "viralReadHostClipFastaFn.fa"
+  proviralValidChimeras = parseProviralReads(
+    readPairs = dualProviralAlignedReads,
+    proviralSeqs = proviralSeqs,
+    hostClipFastaFn = viralReadHostClipFastaFn,
     clipMinLen = args.LTRClipLen)
+    
+  print("### Found {} chimeras. Aligning now to hg38.".format(proviralValidChimeras["potentialValidChimeras"]))
+  # TODO call alignment
+
+
 
   print("### Finding valid unmapped reads that might span between integration site")
   validUnmappedReads = parseUnmappedReads(unmappedPotentialChimera,
