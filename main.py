@@ -14,6 +14,8 @@ from termcolor import cprint
 printRed = lambda x: cprint(x, "red")
 printGreen = lambda x: cprint(x, "green")
 printCyan = lambda x: cprint(x, "cyan")
+printBlue = lambda x: cprint(x, "blue")
+printCyanOnGrey = lambda x: cprint(x, "cyan", "on_grey")
 
 def getProviralFastaIDs(fafile, recordSeqs):
   ids = []
@@ -244,8 +246,6 @@ def isSoftClipProviral(read, proviralLTRSeqs, clipMinLen = 11, softClipPad = 3, 
       # passes all checks!
       print("{}: chimeric match found".format(read.query_name))
       print(s, matches)
-      print(read.to_string())
-      print()
 
       hits[orient].append(matches)
       hits[orient + "Ids"].append(key + "___" + ltrType)
@@ -422,6 +422,10 @@ def writeFasta(chimeras, hostClipFastaFn):
 
 
 def alignClipToHost(fafile, hostGenomeIndex, hostClipLen = 17):
+  if not os.path.exists(fafile) or os.stat(fafile).st_size == 0:
+    printGreen("No records in fasta file. Skipping alignment.") 
+    return None
+
   outputSam = fafile + ".sam"
   command = "bwa mem -T {quality} -k {seed} -a -Y -q {index} {fa} -o {sam}".format(
       index = hostGenomeIndex,
@@ -512,7 +516,7 @@ def parseProviralReads(readPairs, proviralSeqs, hostClipFastaFn, clipMinLen = 17
   return returnVal
 
 
-def parseUnmappedReads(readPairs, proviralSeqs, proviralLTRSeqs, clipMinLen = 11, minHostQuality = 30):
+def parseUnmappedReads(readPairs, proviralSeqs, proviralLTRSeqs, LTRClipMinLen = 11, hostClipMinLen = 17, minHostQuality = 30):
   validUnmapped = []
   validChimera = []
   
@@ -550,11 +554,11 @@ def parseUnmappedReads(readPairs, proviralSeqs, proviralLTRSeqs, clipMinLen = 11
 
     # host read soft clip
     elif hostReadSubs == 1:
-      tmp = getSoftClip(hostRead, clipMinLen, 3)
+      tmp = getSoftClip(hostRead, LTRClipMinLen, 3)
       if tmp is not None:
         print(tmp)
       
-      potentialHits = isSoftClipProviral(hostRead, proviralLTRSeqs, clipMinLen, ignoreOrient = True)
+      potentialHits = isSoftClipProviral(hostRead, proviralLTRSeqs, LTRClipMinLen, ignoreOrient = True)
       if potentialHits:
         validChimera.append(readPair)
       else:
@@ -564,7 +568,7 @@ def parseUnmappedReads(readPairs, proviralSeqs, proviralLTRSeqs, clipMinLen = 11
     elif viralReadSubs == 1:
       # TODO check that it is near start or end of sequence
 
-      viralSoftClip = getSoftClip(viralRead, clipMinLen, 3)
+      viralSoftClip = getSoftClip(viralRead, hostClipMinLen, 3)
       if viralSoftClip is not None:
         print("{}: soft clip detected in virus".format(viralRead.query_name))
         pprint(viralSoftClip)
@@ -574,8 +578,6 @@ def parseUnmappedReads(readPairs, proviralSeqs, proviralLTRSeqs, clipMinLen = 11
 
     else:
       validUnmapped.append(readPair)
-
-  pprint(validChimera)
 
   return {"validChimera": validChimera, "validUnmapped": validUnmapped}
 
@@ -745,18 +747,20 @@ def main(args):
     hostClipFastaFn = outputFNs["viralReadHostClipFasta"],
     clipMinLen = args.hostClipLen)
     
-  printGreen("Found {} chimera(s). Aligning now to hg38.".format(len(proviralValidChimeras["potentialValidChimeras"])))
+  printCyanOnGrey("Found {} potential valid chimera(s)".format(len(proviralValidChimeras["potentialValidChimeras"])))
+  printGreen("Aligning host clips found on viruses to host genome")
   validIntegrationSites = alignClipToHost(fafile=outputFNs["viralReadHostClipFasta"],
     hostGenomeIndex = args.hostGenomeIndex,
     hostClipLen = args.hostClipLen)
 
-  printCyan(validIntegrationSites)
-
-
   printGreen("Finding valid unmapped reads that might span between integration site")
-  validUnmappedReads = parseUnmappedReads(unmappedPotentialChimera,
+  procUnmappedReads = parseUnmappedReads(unmappedPotentialChimera,
     proviralSeqs,
-    potentialLTR)
+    potentialLTR,
+    LTRClipMinLen = args.LTRClipLen,
+    hostClipMinLen = args.hostClipLen)
+  
+  printCyanOnGrey("Found {} valid unmapped + {} with a potentially valid integration site".format(len(procUnmappedReads["validUnmapped"]), len(procUnmappedReads["validChimera"])))
 
 
   #############################
