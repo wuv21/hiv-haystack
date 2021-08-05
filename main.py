@@ -307,7 +307,7 @@ def separateCigarString(cigarstring):
   return cigarSep
 
 
-def checkForChimera(read1, read2, refLen, proviralSeqs, clipMinLen = 11, useAlts = None, softClipPad = 3):
+def checkForChimera(read1, read2, refLen, proviralSeqs, clipMinLen = 17, useAlts = None, softClipPad = 3):
   read1Info = {
     "start": read1.reference_start,
     "cigar": read1.cigar,
@@ -421,14 +421,14 @@ def writeFasta(chimeras, hostClipFastaFn):
   SeqIO.write(records, hostClipFastaFn, "fasta")
 
 
-def alignClipToHost(fafile, hostGenomeIndex, LTRClipLen):
+def alignClipToHost(fafile, hostGenomeIndex, hostClipLen = 17):
   outputSam = fafile + ".sam"
-  command = "bwa mem -T {quality} -k {seed} -a -Y  -q {index} {fa} -o {sam}".format(
+  command = "bwa mem -T {quality} -k {seed} -a -Y -q {index} {fa} -o {sam}".format(
       index = hostGenomeIndex,
       fa = fafile,
       sam = outputSam,
-      quality = LTRClipLen,
-      seed = LTRClipLen - 2)
+      quality = hostClipLen,
+      seed = hostClipLen - 2)
 
   child = subprocess.Popen(command, shell = True)
   child.wait()
@@ -438,7 +438,7 @@ def alignClipToHost(fafile, hostGenomeIndex, LTRClipLen):
   return "done"
 
 
-def parseProviralReads(readPairs, proviralSeqs, hostClipFastaFn, clipMinLen = 11):
+def parseProviralReads(readPairs, proviralSeqs, hostClipFastaFn, clipMinLen = 17):
   validReads = []
   potentialValidChimeras = []
 
@@ -726,7 +726,7 @@ def main(args):
     readPairs = dualProviralAlignedReads,
     proviralSeqs = proviralSeqs,
     hostClipFastaFn = outputFNs["viralReadHostClipFasta"],
-    clipMinLen = args.LTRClipLen)
+    clipMinLen = args.HostClipLen)
     
   printGreen("Found {} chimera(s). Aligning now to hg38.".format(len(proviralValidChimeras["potentialValidChimeras"])))
   alignClipToHost(fafile=outputFNs["viralReadHostClipFasta"],
@@ -786,9 +786,13 @@ if __name__ == '__main__':
     default = 11,
     type = int,
     help = "Number of bp to extend into LTR from a chimeric fragment")
+  parser.add_argument("--HostClipLen",
+    default = 17,
+    type = int,
+    help = "Number of bp to extend into host genome from a chimeric fragment")
   parser.add_argument("--hostGenomeIndex",
     help = "Prefix of bwa indexed host reference genome (NO provirus sequences included)")
-    
+
   args = parser.parse_args()
 
   if not os.path.exists(args.outputDir):
