@@ -364,7 +364,6 @@ def checkForChimera(read1, read2, refLen, proviralSeqs, clipMinLen = 11, useAlts
   else:
     return None
 
-  # TODO check adjacent if ltr sequence isn't at end...
   clip = returnObj["hostSoftClip"]["clippedFrag"]
   if read1Clip is not None:
     provirusStart = read1Info["start"]
@@ -372,6 +371,7 @@ def checkForChimera(read1, read2, refLen, proviralSeqs, clipMinLen = 11, useAlts
     clipPartial = clip[-1 * (provirusStart - 1): ]
     provirusActual = proviralSeqs[read1.reference_name][0][1:provirusStart]
 
+    print("HERE {} {}".format(provirusStart, proviralEnd))
     if provirusStart == 1:
       return returnObj
     elif provirusStart != 1 and clipPartial == provirusActual:
@@ -380,15 +380,15 @@ def checkForChimera(read1, read2, refLen, proviralSeqs, clipMinLen = 11, useAlts
   elif read2Clip is not None:
     provirusStart = read2Info["start"]
     fragmentLen = len(clip)
-    readProviralLen = read2.qlen - fragmentLen
+    readProviralLen = len(read2.seq) - fragmentLen
 
-    proviralEnd = len(proviralSeqs[read1.reference_name][0]) - 1
+    proviralEnd = len(proviralSeqs[read1.reference_name][0])
     reqProviralEnd = proviralEnd - readProviralLen
 
     clipPartial = clip[:reqProviralEnd - proviralEnd]
     provirusActual = proviralSeqs[read2.reference_name][0][-1 * (reqProviralEnd - proviralEnd):]
 
-    print("{} {} {}".format(provirusStart, proviralEnd, readProviralLen))
+    print("HERE {} {} {} {}".format(provirusStart, proviralEnd, readProviralLen, reqProviralEnd))
 
     if provirusStart == reqProviralEnd:
       return returnObj
@@ -402,9 +402,11 @@ def checkForChimera(read1, read2, refLen, proviralSeqs, clipMinLen = 11, useAlts
 def writeFasta(chimeras, hostClipFastaFn):
   records = []
   for chimera in chimeras:
+    
+    print(chimera["hostSoftClip"]["clippedFrag"])
     record = SeqRecord(
       id = chimera["chimericRead"].qname,
-      seq = chimera["hostSoftClip"].clippedFrag
+      seq = Seq(chimera["hostSoftClip"]["clippedFrag"])
     )
 
     records.append(record)
@@ -498,7 +500,6 @@ def parseUnmappedReads(readPairs, proviralSeqs, proviralLTRSeqs, clipMinLen = 11
 
     # if no soft clips, just save as valid unmapped
     if hostReadSubs == 0 and viralReadSubs == 0:
-      print("{}: Valid unmapped but no integration site possible".format(hostRead.query_name))
       validUnmapped.append(readPair)
       continue
 
@@ -676,8 +677,8 @@ def main(args):
     # import files
     dualProviralAlignedReads = importProcessedBam(args.outputDir + "/" + outputFNs["proviralReads"],
       returnDict = True)
-    #hostReadsWithPotentialChimera = importProcessedBam(args.outputDir + "/" + outputFNs["hostWithPotentialChimera"],
-    #  returnDict = True)
+    hostReadsWithPotentialChimera = importProcessedBam(args.outputDir + "/" + outputFNs["hostWithPotentialChimera"],
+      returnDict = True)
     unmappedPotentialChimera = importProcessedBam(args.outputDir + "/" +  outputFNs["umappedWithPotentialChimera"],
       returnDict = True)
 
@@ -686,10 +687,10 @@ def main(args):
   #############################
 
   # parse host reads with potential chimera
-  # print("### Finding valid chimeras from host reads")
-  #hostValidChimeras = parseHostReadsWithPotentialChimera(hostReadsWithPotentialChimera,
-  #  potentialLTR,
-  #  clipMinLen = args.LTRClipLen)
+  print("### Finding valid chimeras from host reads")
+  hostValidChimeras = parseHostReadsWithPotentialChimera(hostReadsWithPotentialChimera,
+    potentialLTR,
+    clipMinLen = args.LTRClipLen)
   
   print("### Finding valid chimeras from proviral reads")
   viralReadHostClipFastaFn = "viralReadHostClipFastaFn.fa"
@@ -699,9 +700,8 @@ def main(args):
     hostClipFastaFn = viralReadHostClipFastaFn,
     clipMinLen = args.LTRClipLen)
     
-  print("### Found {} chimeras. Aligning now to hg38.".format(proviralValidChimeras["potentialValidChimeras"]))
+  print("### Found {} chimera(s). Aligning now to hg38.".format(len(proviralValidChimeras["potentialValidChimeras"])))
   # TODO call alignment
-
 
 
   print("### Finding valid unmapped reads that might span between integration site")
@@ -727,7 +727,7 @@ def main(args):
 
   writeBam(args.outputDir + "/" + outputFNs["validProviralReadsWithPotentialChimera"],
     cellrangerBam,
-    proviralValidChimeras["potentialValidChimeras"])
+    [x["chimericRead"] for x in proviralValidChimeras["potentialValidChimeras"]])
   cellrangerBam.close()
 
 
