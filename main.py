@@ -412,7 +412,8 @@ def writeFasta(chimeras, hostClipFastaFn):
     print(chimera["hostSoftClip"]["clippedFrag"])
     record = SeqRecord(
       id = chimera["chimericRead"].qname,
-      seq = Seq(chimera["hostSoftClip"]["clippedFrag"])
+      seq = Seq(chimera["hostSoftClip"]["clippedFrag"]),
+      description = ""
     )
 
     records.append(record)
@@ -420,14 +421,14 @@ def writeFasta(chimeras, hostClipFastaFn):
   SeqIO.write(records, hostClipFastaFn, "fasta")
 
 
-def alignClipToHost(fafile, hostGenomeIndex, LTRclipLen):
+def alignClipToHost(fafile, hostGenomeIndex, LTRClipLen):
   outputSam = fafile + ".sam"
   command = "bwa mem -T {quality} -k {seed} -a -Y  -q {index} {fa} -o {sam}".format(
       index = hostGenomeIndex,
       fa = fafile,
       sam = outputSam,
-      quality = LTRclipLen,
-      seed = LTRclipLen - 2)
+      quality = LTRClipLen,
+      seed = LTRClipLen - 2)
 
   child = subprocess.Popen(command, shell = True)
   child.wait()
@@ -648,6 +649,10 @@ def main(args):
     "validProviralReadsWithPotentialChimera": "validProviralReadsWithPotentialChimera.bam",
     "viralReadHostClipFasta": "viralReadHostClipFastaFn.fa"
   }
+
+  for k in outputFNs:
+    outputFNs[k] = args.outputDir + "/" + outputFNs[k]
+
   
   # set up initial dictionaries
   dualProviralAlignedReads = defaultdict(list)
@@ -676,7 +681,7 @@ def main(args):
   # Parse or load BAM files
   #############################
 
-  if not os.path.exists(args.outputDir + "/" + outputFNs["proviralReads"]):
+  if not os.path.exists(outputFNs["proviralReads"]):
     # parse BAM file
     printGreen("Parsing cellranger BAM (namesorted)")
     parseCellrangerBam(bamfile = args.bamfile,
@@ -690,20 +695,20 @@ def main(args):
     printGreen("Writing out BAM files of parsed records")
 
     cellrangerBam = pysam.AlignmentFile(args.bamfile, "rb")
-    writeBam(args.outputDir + "/" + outputFNs["proviralReads"], cellrangerBam, dualProviralAlignedReads)
-    writeBam(args.outputDir + "/" + outputFNs["hostWithPotentialChimera"], cellrangerBam, hostReadsWithPotentialChimera)
-    writeBam(args.outputDir + "/" +  outputFNs["umappedWithPotentialChimera"], cellrangerBam, unmappedPotentialChimera)
+    writeBam(outputFNs["proviralReads"], cellrangerBam, dualProviralAlignedReads)
+    writeBam(outputFNs["hostWithPotentialChimera"], cellrangerBam, hostReadsWithPotentialChimera)
+    writeBam(outputFNs["umappedWithPotentialChimera"], cellrangerBam, unmappedPotentialChimera)
     cellrangerBam.close()
 
   else:
     printGreen("Parsed BAM files already found. Importing these files to save time.")
     
     # import files
-    dualProviralAlignedReads = importProcessedBam(args.outputDir + "/" + outputFNs["proviralReads"],
+    dualProviralAlignedReads = importProcessedBam(outputFNs["proviralReads"],
       returnDict = True)
-    #hostReadsWithPotentialChimera = importProcessedBam(args.outputDir + "/" + outputFNs["hostWithPotentialChimera"],
+    #hostReadsWithPotentialChimera = importProcessedBam(outputFNs["hostWithPotentialChimera"],
      # returnDict = True)
-    unmappedPotentialChimera = importProcessedBam(args.outputDir + "/" +  outputFNs["umappedWithPotentialChimera"],
+    unmappedPotentialChimera = importProcessedBam(outputFNs["umappedWithPotentialChimera"],
       returnDict = True)
 
   #############################
@@ -724,10 +729,9 @@ def main(args):
     clipMinLen = args.LTRClipLen)
     
   printGreen("Found {} chimera(s). Aligning now to hg38.".format(len(proviralValidChimeras["potentialValidChimeras"])))
-  # TODO call alignment
   alignClipToHost(fafile=outputFNs["viralReadHostClipFasta"],
     hostGenomeIndex = args.hostGenomeIndex,
-    LTRclipLen = args.LTRclipLen)
+    LTRClipLen = args.LTRClipLen)
 
   printGreen("Finding valid unmapped reads that might span between integration site")
   validUnmappedReads = parseUnmappedReads(unmappedPotentialChimera,
@@ -746,11 +750,11 @@ def main(args):
   #   cellrangerBam,
   #   hostValidChimeras["validReads"])
 
-  writeBam(args.outputDir + "/" + outputFNs["validProviralReads"],
+  writeBam(outputFNs["validProviralReads"],
     cellrangerBam,
     proviralValidChimeras["validReads"])
 
-  writeBam(args.outputDir + "/" + outputFNs["validProviralReadsWithPotentialChimera"],
+  writeBam(outputFNs["validProviralReadsWithPotentialChimera"],
     cellrangerBam,
     [x["chimericRead"] for x in proviralValidChimeras["potentialValidChimeras"]])
   cellrangerBam.close()
