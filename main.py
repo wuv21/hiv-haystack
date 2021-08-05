@@ -726,12 +726,12 @@ def main(args):
     readPairs = dualProviralAlignedReads,
     proviralSeqs = proviralSeqs,
     hostClipFastaFn = outputFNs["viralReadHostClipFasta"],
-    clipMinLen = args.HostClipLen)
+    clipMinLen = args.hostClipLen)
     
   printGreen("Found {} chimera(s). Aligning now to hg38.".format(len(proviralValidChimeras["potentialValidChimeras"])))
   alignClipToHost(fafile=outputFNs["viralReadHostClipFasta"],
     hostGenomeIndex = args.hostGenomeIndex,
-    LTRClipLen = args.LTRClipLen)
+    hostClipLen = args.hostClipLen)
 
   printGreen("Finding valid unmapped reads that might span between integration site")
   validUnmappedReads = parseUnmappedReads(unmappedPotentialChimera,
@@ -786,7 +786,7 @@ if __name__ == '__main__':
     default = 11,
     type = int,
     help = "Number of bp to extend into LTR from a chimeric fragment")
-  parser.add_argument("--HostClipLen",
+  parser.add_argument("--hostClipLen",
     default = 17,
     type = int,
     help = "Number of bp to extend into host genome from a chimeric fragment")
