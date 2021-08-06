@@ -607,6 +607,7 @@ def parseProviralReads(readPairs, proviralSeqs, hostClipFastaFn, clipMinLen = 17
 def parseUnmappedReads(readPairs, proviralSeqs, proviralLTRSeqs, LTRClipMinLen = 11, hostClipMinLen = 17, minHostQuality = 30):
   validUnmapped = []
   validChimera = []
+  potentialChimera = []
   
   for k in readPairs:
     readPair = readPairs[k]
@@ -654,20 +655,34 @@ def parseUnmappedReads(readPairs, proviralSeqs, proviralLTRSeqs, LTRClipMinLen =
 
     # viral read soft clip
     elif viralReadSubs == 1:
-      # TODO check that it is near start or end of sequence
+      refLen = len(proviralSeqs[viralRead.reference_name][0])
+      readAllAlts = getAltAlign(viralRead)
 
-      viralSoftClip = getSoftClip(viralRead, hostClipMinLen, 3)
+      viralSoftClipAlt = None
+      if readAllAlts is not None:
+        readAlts = [alt for alt in readAllAlts if alt[0] == viralRead.reference_name]
+        if len(readAlts) == 1:
+          viralSoftClipAlt = checkForPotentialHostClip(viralRead, refLen, proviralSeqs = proviralSeqs,
+            clipMinLen = hostClipMinLen, useAlts = readAlts[0])
+
+      viralSoftClip = checkForPotentialHostClip(viralRead, refLen, proviralSeqs = proviralSeqs,
+        clipMinLen = hostClipMinLen, useAlts = None)
+
       if viralSoftClip is not None:
-        print("{}: soft clip detected in virus".format(viralRead.query_name))
-        pprint(viralSoftClip)
+        print("{}: Valid soft clip detected in virus. Proceed further".format(viralRead.query_name))
         print(viralRead.to_string())
-        print(hostRead.to_string())
-        print()
+        potentialChimera.append(viralSoftClip)
+      elif viralSoftClipAlt is not None:
+        print("{}: Valid alternate soft clip detected in virus. Proceed further".format(viralRead.query_name))
+        print(viralRead.to_string())
+        potentialChimera.append(viralSoftClipAlt)
 
     else:
       validUnmapped.append(readPair)
 
-  return {"validChimera": validChimera, "validUnmapped": validUnmapped}
+  return {"validChimera": validChimera,
+    "validUnmapped": validUnmapped,
+    "potentialChimera": potentialChimera}
 
 
 def parseCellrangerBam(bamfile, proviralFastaIds, proviralReads, hostReadsWithPotentialChimera, unmappedPotentialChimera, top_n = -1):
