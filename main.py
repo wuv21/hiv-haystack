@@ -245,7 +245,6 @@ def isSoftClipProviral(read, proviralLTRSeqs, clipMinLen = 11, softClipPad = 3, 
 
       # passes all checks!
       print("{}: chimeric match found".format(read.query_name))
-      print(s, matches)
 
       hits[orient].append(matches)
       hits[orient + "Ids"].append(key + "___" + ltrType)
@@ -377,7 +376,7 @@ def checkForChimera(read1, read2, refLen, proviralSeqs, clipMinLen = 17, useAlts
     clipPartial = clip[-1 * (provirusStart - 1): ]
     provirusActual = proviralSeqs[read1.reference_name][0][1:provirusStart]
 
-    print("HERE {} {}".format(provirusStart, proviralEnd))
+    print("HERE {}".format(provirusStart))
     if provirusStart == 1:
       return returnObj
     elif provirusStart != 1 and clipPartial == provirusActual:
@@ -539,7 +538,7 @@ def parseUnmappedReads(readPairs, proviralSeqs, proviralLTRSeqs, LTRClipMinLen =
     
     # can't have mulutiple soft clips present
     if hostReadSubs + viralReadSubs > 1:
-      print("{}: Multiple soft clips in either/both reads, but still valid".format(hostRead.query_name))
+      #print("{}: Multiple soft clips in either/both reads, but still valid".format(hostRead.query_name))
       validUnmapped.append(readPair)
       continue
 
@@ -548,9 +547,9 @@ def parseUnmappedReads(readPairs, proviralSeqs, proviralLTRSeqs, LTRClipMinLen =
       validUnmapped.append(readPair)
       continue
 
-    # special case
+    # special case. #TODO add this case.
     if hostReadSubs == 1 and viralReadSubs == 1:
-      print("Soft clip detected in both host and viral")
+      printRed("Soft clip detected in both host and viral")
 
     # host read soft clip
     elif hostReadSubs == 1:
