@@ -306,92 +306,57 @@ def separateCigarString(cigarstring):
   return cigarSep
 
 
-def checkForChimera(read1, read2, refLen, proviralSeqs, clipMinLen = 17, useAlts = None, softClipPad = 3):
-  read1Info = {
-    "start": read1.reference_start,
-    "cigar": read1.cigar,
-    "cigarstring": read1.cigarstring
-  }
-  read2Info = {
-    "start": read2.reference_start,
-    "cigar": read2.cigar,
-    "cigarstring": read2.cigarstring
+def checkForPotentialHostClip(read, refLen, proviralSeqs, clipMinLen = 17, useAlts = None, softClipPad = 3):
+  readInfo = {
+    "start": read.reference_start,
+    "cigar": read.cigar,
+    "cigarstring": read.cigarstring
   }
 
   if useAlts is not None:
-    read1Alts = useAlts[0]
-    read2Alts = useAlts[1]
+    readInfo["start"] = int(useAlts[0][1].lstrip("[+-]"))
+    readInfo["cigarstring"] = useAlts[0][2]
 
-    if not (len(read1Alts) == 1 and len(read2Alts) == 1):
-      return None
-    
-    read1Info["start"] = int(read1Alts[0][1].lstrip("[+-]"))
-    read1Info["cigarstring"] = read1Alts[0][2]
-
-    read2Info["start"] = int(read2Alts[0][1].lstrip("[+-]"))
-    read2Info["cigarstring"] = read2Alts[0][2]
-
-    read1Clip = getSoftClip(read1, clipMinLen, softClipPad, useAlt = read1Info)
-    read2Clip = getSoftClip(read2, clipMinLen, softClipPad, useAlt = read2Info)
+    readClip = getSoftClip(read, clipMinLen, softClipPad, useAlt = readInfo)
   
   else:
-    read1Clip = getSoftClip(read1, clipMinLen, softClipPad)
-    read2Clip = getSoftClip(read2, clipMinLen, softClipPad)
+    readClip = getSoftClip(read, clipMinLen, softClipPad)
 
-  read1Near5p = read1Info["start"] <= softClipPad
-  read2Near3p = read2Info["start"] >= refLen - read2.query_length - softClipPad - 1
-  
-  # proximity check
-  if not read1Near5p and not read2Near3p:
+  readNear5p = readInfo["start"] <= softClipPad
+  readNear3p = readInfo["start"] >= refLen - read.query_length - softClipPad - 1
+
+  if readClip is None or (not readNear5p and not readNear3p):
     # print("{} is not close enough to LTR".format(read1.query_name))
     return None
 
-  # can't have multiple soft clips in both reads
-  if read1Clip is not None and read2Clip is not None:
-    return None
-
-  # verify length of substitution
   returnObj = {
-    "chimericRead": None,
-    "nonChimericRead": None,
-    "hostSoftClip": None
+    "read": read,
+    "hostSoftClip": readClip
   }
-  if read1Near5p and read1Clip is not None:
-    returnObj["chimericRead"] = read1
-    returnObj["nonChimericRead"] = read2
-    returnObj["hostSoftClip"] = read1Clip
 
-  elif read2Near3p and read2Clip is not None:
-    returnObj["chimericRead"] = read1
-    returnObj["nonChimericRead"] = read2
-    returnObj["hostSoftClip"] = read2Clip
-  
-  else:
-    return None
-
-  clip = returnObj["hostSoftClip"]["clippedFrag"]
-  if read1Clip is not None:
-    provirusStart = read1Info["start"]
+  clip = readClip["clippedFrag"]
+  if readNear5p:
+    provirusStart = readInfo["start"]
 
     clipPartial = clip[-1 * (provirusStart - 1): ]
-    provirusActual = proviralSeqs[read1.reference_name][0][1:provirusStart]
+    provirusActual = proviralSeqs[read.reference_name][0][1:provirusStart]
+    print("HERE {} {}".format(read.to_string, provirusStart))
 
-    print("HERE {}".format(provirusStart))
     if provirusStart == 1:
       return returnObj
     elif provirusStart != 1 and clipPartial == provirusActual:
       return returnObj
 
-  elif read2Clip is not None:
-    provirusStart = read2Info["start"]
+  elif readNear3p:
+    provirusStart = readInfo["start"]
     fragmentLen = len(clip)
-    readProviralLen = len(read2.seq) - fragmentLen
+    readProviralLen = len(read.seq) - fragmentLen
 
-    proviralEnd = len(proviralSeqs[read1.reference_name][0])
+    proviralEnd = len(proviralSeqs[read.reference_name][0])
     reqProviralEnd = proviralEnd - readProviralLen
 
     clipPartial = clip[:reqProviralEnd - proviralEnd]
-    provirusActual = proviralSeqs[read2.reference_name][0][-1 * (reqProviralEnd - proviralEnd):]
+    provirusActual = proviralSeqs[read.reference_name][0][-1 * (reqProviralEnd - proviralEnd):]
 
     print("HERE {} {} {} {}".format(provirusStart, proviralEnd, readProviralLen, reqProviralEnd))
 
@@ -402,6 +367,104 @@ def checkForChimera(read1, read2, refLen, proviralSeqs, clipMinLen = 17, useAlts
       return returnObj
 
   return None
+  
+
+# def checkForChimera(read1, read2, refLen, proviralSeqs, clipMinLen = 17, useAlts = None, softClipPad = 3):
+#   read1Info = {
+#     "start": read1.reference_start,
+#     "cigar": read1.cigar,
+#     "cigarstring": read1.cigarstring
+#   }
+#   read2Info = {
+#     "start": read2.reference_start,
+#     "cigar": read2.cigar,
+#     "cigarstring": read2.cigarstring
+#   }
+
+#   if useAlts is not None:
+#     read1Alts = useAlts[0]
+#     read2Alts = useAlts[1]
+
+#     if not (len(read1Alts) == 1 and len(read2Alts) == 1):
+#       return None
+    
+#     read1Info["start"] = int(read1Alts[0][1].lstrip("[+-]"))
+#     read1Info["cigarstring"] = read1Alts[0][2]
+
+#     read2Info["start"] = int(read2Alts[0][1].lstrip("[+-]"))
+#     read2Info["cigarstring"] = read2Alts[0][2]
+
+#     read1Clip = getSoftClip(read1, clipMinLen, softClipPad, useAlt = read1Info)
+#     read2Clip = getSoftClip(read2, clipMinLen, softClipPad, useAlt = read2Info)
+  
+#   else:
+#     read1Clip = getSoftClip(read1, clipMinLen, softClipPad)
+#     read2Clip = getSoftClip(read2, clipMinLen, softClipPad)
+
+#   read1Near5p = read1Info["start"] <= softClipPad
+#   read2Near3p = read2Info["start"] >= refLen - read2.query_length - softClipPad - 1
+  
+#   # proximity check
+#   if not read1Near5p and not read2Near3p:
+#     # print("{} is not close enough to LTR".format(read1.query_name))
+#     return None
+
+#   # can't have multiple soft clips in both reads
+#   if read1Clip is not None and read2Clip is not None:
+#     return None
+
+#   # verify length of substitution
+#   returnObj = {
+#     "chimericRead": None,
+#     "nonChimericRead": None,
+#     "hostSoftClip": None
+#   }
+#   if read1Near5p and read1Clip is not None:
+#     returnObj["chimericRead"] = read1
+#     returnObj["nonChimericRead"] = read2
+#     returnObj["hostSoftClip"] = read1Clip
+
+#   elif read2Near3p and read2Clip is not None:
+#     returnObj["chimericRead"] = read1
+#     returnObj["nonChimericRead"] = read2
+#     returnObj["hostSoftClip"] = read2Clip
+  
+#   else:
+#     return None
+
+#   clip = returnObj["hostSoftClip"]["clippedFrag"]
+#   if read1Clip is not None:
+#     provirusStart = read1Info["start"]
+
+#     clipPartial = clip[-1 * (provirusStart - 1): ]
+#     provirusActual = proviralSeqs[read1.reference_name][0][1:provirusStart]
+
+#     print("HERE {}".format(provirusStart))
+#     if provirusStart == 1:
+#       return returnObj
+#     elif provirusStart != 1 and clipPartial == provirusActual:
+#       return returnObj
+
+#   elif read2Clip is not None:
+#     provirusStart = read2Info["start"]
+#     fragmentLen = len(clip)
+#     readProviralLen = len(read2.seq) - fragmentLen
+
+#     proviralEnd = len(proviralSeqs[read1.reference_name][0])
+#     reqProviralEnd = proviralEnd - readProviralLen
+
+#     clipPartial = clip[:reqProviralEnd - proviralEnd]
+#     provirusActual = proviralSeqs[read2.reference_name][0][-1 * (reqProviralEnd - proviralEnd):]
+
+#     print("HERE {} {} {} {}".format(provirusStart, proviralEnd, readProviralLen, reqProviralEnd))
+
+#     if provirusStart == reqProviralEnd:
+#       return returnObj
+    
+#     elif provirusStart != reqProviralEnd and clipPartial == provirusActual:
+#       return returnObj
+
+#   return None
 
 
 def writeFasta(chimeras, hostClipFastaFn):
@@ -486,6 +549,10 @@ def parseProviralReads(readPairs, proviralSeqs, hostClipFastaFn, clipMinLen = 17
     if read1.reference_start > read2.reference_start:
       read1, read2 = read2, read1
     
+    # skip if there's multiple soft clips
+    if read1.cigarstring.count("S") + read2.cigarstring.count("S") > 1:
+      continue
+
     # move on to chimera analysis
     refLen = len(proviralSeqs[read1.reference_name][0])
     read1AllAlts = getAltAlign(read1)
@@ -496,14 +563,36 @@ def parseProviralReads(readPairs, proviralSeqs, hostClipFastaFn, clipMinLen = 17
       read1Alts = [alt for alt in read1AllAlts if alt[0] == read1.reference_name]
       read2Alts = [alt for alt in read2AllAlts if alt[0] == read2.reference_name]
 
-      potentialAltChimera = checkForChimera(read1, read2, refLen, proviralSeqs = proviralSeqs,
-        clipMinLen = clipMinLen, useAlts = [read1Alts, read2Alts])
+      if len(read1Alts) > 1 or len(read2Alts) > 1:
+        print("{}: has multiple alt aligns. Verify manually.".format(read1.qname))
+      
+      read1Alt = read1Alts[0]
+      read2Alt = read2Alts[0]
 
-    potentialChimera = checkForChimera(read1, read2, refLen, proviralSeqs = proviralSeqs,
+      read1AltCheck = checkForPotentialHostClip(read1, refLen, proviralSeqs = proviralSeqs,
+        clipMinLen = clipMinLen, useAlts = read2Alts)
+
+      read2AltCheck = checkForPotentialHostClip(read2, refLen, proviralSeqs = proviralSeqs,
+        clipMinLen = clipMinLen, useAlts = read2Alts)
+
+      if read1AltCheck is None and read2AltCheck is not None:
+        potentialAltChimera = read2AltCheck
+      elif read1AltCheck is not None and read2AltCheck is None:
+        potentialAltChimera = read1AltCheck
+
+    potentialChimera = None
+    read1Check = checkForPotentialHostClip(read1, refLen, proviralSeqs = proviralSeqs,
       clipMinLen = clipMinLen, useAlts = None)
+    read2Check = checkForPotentialHostClip(read2, refLen, proviralSeqs = proviralSeqs,
+      clipMinLen = clipMinLen, useAlts = None)  
+  
+    if read1Check is None and read2Check is not None:
+      potentialChimera = read2Check
+    elif read1Check is not None and read2Check is None:
+      potentialChimera = read1Check
 
     if potentialAltChimera is not None and potentialChimera is not None:
-      print("Warning...")
+      printRed("{}: please verify. Clip identified in both alt and normal align.".format(read1.qname))
     elif potentialAltChimera is not None:
       potentialValidChimeras.append(potentialAltChimera)
     elif potentialChimera is not None:
