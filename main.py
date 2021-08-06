@@ -314,8 +314,8 @@ def checkForPotentialHostClip(read, refLen, proviralSeqs, clipMinLen = 17, useAl
   }
 
   if useAlts is not None:
-    readInfo["start"] = int(useAlts[0][1].lstrip("[+-]"))
-    readInfo["cigarstring"] = useAlts[0][2]
+    readInfo["start"] = int(useAlts[1].lstrip("[+-]"))
+    readInfo["cigarstring"] = useAlts[2]
 
     readClip = getSoftClip(read, clipMinLen, softClipPad, useAlt = readInfo)
   
@@ -473,7 +473,7 @@ def writeFasta(chimeras, hostClipFastaFn):
     
     print(chimera["hostSoftClip"]["clippedFrag"])
     record = SeqRecord(
-      id = chimera["chimericRead"].qname,
+      id = chimera["read"].qname,
       seq = Seq(chimera["hostSoftClip"]["clippedFrag"]),
       description = ""
     )
@@ -562,18 +562,18 @@ def parseProviralReads(readPairs, proviralSeqs, hostClipFastaFn, clipMinLen = 17
     if read1AllAlts is not None and read2AllAlts is not None:
       read1Alts = [alt for alt in read1AllAlts if alt[0] == read1.reference_name]
       read2Alts = [alt for alt in read2AllAlts if alt[0] == read2.reference_name]
-
+      
+      read1AltCheck = None
+      read2AltCheck = None
       if len(read1Alts) > 1 or len(read2Alts) > 1:
         print("{}: has multiple alt aligns. Verify manually.".format(read1.qname))
       
-      read1Alt = read1Alts[0]
-      read2Alt = read2Alts[0]
-
-      read1AltCheck = checkForPotentialHostClip(read1, refLen, proviralSeqs = proviralSeqs,
-        clipMinLen = clipMinLen, useAlts = read2Alts)
-
-      read2AltCheck = checkForPotentialHostClip(read2, refLen, proviralSeqs = proviralSeqs,
-        clipMinLen = clipMinLen, useAlts = read2Alts)
+      if len(read1Alts) == 1:
+        read1AltCheck = checkForPotentialHostClip(read1, refLen, proviralSeqs = proviralSeqs,
+          clipMinLen = clipMinLen, useAlts = read1Alts[0])
+      if len(read2Alts) == 1:
+        read2AltCheck = checkForPotentialHostClip(read2, refLen, proviralSeqs = proviralSeqs,
+          clipMinLen = clipMinLen, useAlts = read2Alts[0])
 
       if read1AltCheck is None and read2AltCheck is not None:
         potentialAltChimera = read2AltCheck
@@ -868,7 +868,7 @@ def main(args):
 
   writeBam(outputFNs["validProviralReadsWithPotentialChimera"],
     cellrangerBam,
-    [x["chimericRead"] for x in proviralValidChimeras["potentialValidChimeras"]])
+    [x["read"] for x in proviralValidChimeras["potentialValidChimeras"]])
   cellrangerBam.close()
 
 
