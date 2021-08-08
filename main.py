@@ -10,12 +10,14 @@ import re
 import subprocess
 from pprint import pprint
 from termcolor import cprint
+from scripts.outputModules import *
 
 printRed = lambda x: cprint(x, "red")
 printGreen = lambda x: cprint(x, "green")
 printCyan = lambda x: cprint(x, "cyan")
 printBlue = lambda x: cprint(x, "blue")
 printCyanOnGrey = lambda x: cprint(x, "cyan", "on_grey")
+
 
 def getProviralFastaIDs(fafile, recordSeqs):
   ids = []
@@ -40,6 +42,13 @@ def extractCellBarcode(read):
 def getLTRseq(seq, start, end):
   ltrSeq = seq[start - 1:end]
   return ltrSeq
+
+
+def separateCigarString(cigarstring):
+  cigarSep = re.findall(r"(\d+\w)", cigarstring)
+  cigarSepExpanded = [re.split(r"(\d+)", x)[1:3] for x in cigarSep]
+
+  return cigarSepExpanded
 
 
 def parseLTRMatches(LTRargs, proviralSeqs, position = False, endBuffer = 20):
@@ -155,17 +164,23 @@ def getSoftClip(read, clipMinLen, softClipPad, useAlt = None):
   elif not clip5Present and not clip3Present:
     return None
   else:
+    if clip5Present:
+      adjacentPos = read.reference_start + len(clippedFrag)
+    else:
+      adjacentPos = len(read.query_sequence) - len(clippedFrag) - 1
+
     clippedFragObj = {
       "clippedFrag": clippedFrag,
       "adjacentFrag": adjacentFrag,
       "useAlt": useAlt,
+      "adjacentPosToClip": adjacentPos,
       "clip5Present": clip5Present,
       "clip3Present": clip3Present}
 
     return clippedFragObj
 
 
-def isSoftClipProviral(read, proviralLTRSeqs, clipMinLen = 11, softClipPad = 3, ignoreOrient = False):
+def isSoftClipProviral(read, proviralLTRSeqs, proviralSeqs, clipMinLen = 11, softClipPad = 3, ignoreOrient = False):
   clippedFragObj = getSoftClip(read, clipMinLen, softClipPad)
   
   # skip if no clipped fragment long enough is found
@@ -230,58 +245,75 @@ def isSoftClipProviral(read, proviralLTRSeqs, clipMinLen = 11, softClipPad = 3, 
       # check if the adjacent host clips could have also been aligned to the viral LTR,
       # thus explaining the lack of viral clip not being at either end of LTR
       ltrEnd = ""
+      adjustment = 0
       if (ltrType == "5p" or ltrType == "3pRevComp") and min(matches) != 0:
+        adjustment = -1 * min(matches)
         ltrEnd = str(s)[0:min(matches)]
-        hostAdjacentBp = str(read.seq)[-len(strClippedFrag) - len(ltrEnd): -len(strClippedFrag)]
+        hostAdjacentSeq = clippedFragObj["adjacentFrag"][adjustment:]
 
       elif (ltrType == "3p" or ltrType == "5pRevComp") and max(matches) != ltrLen - softClipPad:
-        adjacentBpNum = ltrLen - max(matches) - len(strClippedFrag)
+        adjustment = ltrLen - max(matches)
         ltrEnd = str(s)[max(matches) + len(strClippedFrag): ltrLen]
-        hostAdjacentBp = str(read.seq)[len(strClippedFrag): len(strClippedFrag) + adjacentBpNum]
+        hostAdjacentSeq = clippedFragObj["adjacentFrag"][0:adjustment]
 
-      if ltrEnd != "" and ltrEnd != hostAdjacentBp:
+      if ltrEnd != "" and ltrEnd != hostAdjacentSeq:
         print("{}: Viral clip not found at the end of LTR".format(read.query_name))
         continue
 
       # passes all checks!
       print("{}: chimeric match found".format(read.query_name))
+      
+      if ltrType == "5p" or ltrType == "5pRevComp":
+        proviralStartPos = 0
+        proviralEndPos = len(clippedFragObj["clippedFrag"]) + abs(adjustment) 
+      elif ltrType == "3p" or ltrType == "3pRevComp":
+        proviralStartPos = len(proviralSeqs[key][0]) - len(clippedFragObj["clippedFrag"]) - abs(adjustment)
+        proviralEndPos = len(proviralSeqs[key][0]) - 1
 
-      hits[orient].append(matches)
-      hits[orient + "Ids"].append(key + "___" + ltrType)
+      intsite = IntegrationSite(
+        chr = read.reference_name,
+        pos = clippedFragObj["adjacentPosToClip"] + adjustment)
+
+      proviralFrag = ProviralFragment(
+        seqname = key,
+        orient = orient,
+        startBp = proviralStartPos,
+        endBp = proviralEndPos,
+        usingAlt = None
+      )
+
+      chimera = ChimericRead(read = read, intsite = intsite, proviralFragment = proviralFrag)
+      hits[orient].append(chimera)
       foundHit = True
 
   # can only be plus orientation OR minus orientation only
-  if foundHit and len(hits["plus"]) != 0 and len(hits["minus"]) == 0:
-    return hits
-  elif foundHit and len(hits["minus"]) != 0 and len(hits["plus"]) == 0:
-    return hits
-  else:
+  if not foundHit:
     return False
+  elif len(hits["plus"]) != 0 and len(hits["minus"]) == 0:
+    return hits
+  elif len(hits["minus"]) != 0 and len(hits["plus"]) == 0:
+    return hits
 
 
-def parseHostReadsWithPotentialChimera(readPairs, proviralLTRSeqs, clipMinLen):
-  validHits = []
-  validReads = []
-
+def parseHostReadsWithPotentialChimera(readPairs, proviralLTRSeqs, proviralSeqs, clipMinLen):
+  validChimeras = []
   for key in readPairs:
     # only allow one read mate to have soft clip
     if len(readPairs[key]) != 1:
       continue 
     
     read = readPairs[key][0]
-
     # must contain valid cell barcode passing allowlist
     if extractCellBarcode(read) is None:
      continue
     
-    potentialHits = isSoftClipProviral(read, proviralLTRSeqs, clipMinLen)
+    validHits = isSoftClipProviral(read, proviralLTRSeqs, proviralSeqs, clipMinLen)
     
-    if potentialHits:
-      validHits.append(potentialHits)
-      validReads.append(read)
+    if validHits:
+      pprint(validHits)
+      validChimeras.append(validHits)
 
-  returnVal = {"validHits": validHits, "validReads": validReads}
-  return returnVal
+  return validChimeras
 
 
 def getAltAlign(read):
@@ -298,12 +330,6 @@ def getAltAlign(read):
 
   return altAligns
 
-
-def separateCigarString(cigarstring):
-  cigarSep = re.findall(r"(\d+\w)", cigarstring)
-  cigarSepExpanded = [re.split(r"(\d+)", x)[1:3] for x in cigarSep]
-
-  return cigarSep
 
 
 def checkForPotentialHostClip(read, refLen, proviralSeqs, clipMinLen = 17, useAlts = None, softClipPad = 3):
@@ -358,8 +384,6 @@ def checkForPotentialHostClip(read, refLen, proviralSeqs, clipMinLen = 17, useAl
     clipPartial = clip[:reqProviralEnd - proviralEnd]
     provirusActual = proviralSeqs[read.reference_name][0][-1 * (reqProviralEnd - proviralEnd):]
 
-    print("HERE {} {} {} {}".format(provirusStart, proviralEnd, readProviralLen, reqProviralEnd))
-
     if provirusStart == reqProviralEnd:
       return returnObj
     
@@ -367,7 +391,7 @@ def checkForPotentialHostClip(read, refLen, proviralSeqs, clipMinLen = 17, useAl
       return returnObj
 
   return None
-  
+
 
 def writeFasta(chimeras, hostClipFastaFn):
   records = []
@@ -513,7 +537,7 @@ def parseUnmappedReads(readPairs, proviralSeqs, proviralLTRSeqs, LTRClipMinLen =
   validUnmapped = []
   validChimera = []
   potentialChimera = []
-  
+
   for k in readPairs:
     readPair = readPairs[k]
     if readPair[0].reference_name in proviralSeqs.keys():
@@ -743,10 +767,10 @@ def main(args):
   #############################
 
   # parse host reads with potential chimera
-  #printGreen("Finding valid chimeras from host reads")
-  #hostValidChimeras = parseHostReadsWithPotentialChimera(hostReadsWithPotentialChimera,
-  #  potentialLTR,
-  #  clipMinLen = args.LTRClipLen)
+  printGreen("Finding valid chimeras from host reads")
+  hostValidChimeras = parseHostReadsWithPotentialChimera(hostReadsWithPotentialChimera,
+   potentialLTR,
+   clipMinLen = args.LTRClipLen)
   
   printGreen("Finding valid chimeras from proviral reads")
   proviralValidChimeras = parseProviralReads(
@@ -767,8 +791,22 @@ def main(args):
     potentialLTR,
     LTRClipMinLen = args.LTRClipLen,
     hostClipMinLen = args.hostClipLen)
-  
-  printCyanOnGrey("Found {} valid unmapped + {} with a potentially valid integration site".format(len(procUnmappedReads["validUnmapped"]), len(procUnmappedReads["validChimera"])))
+
+  # TODO check potentialChimera (viral with potential host clip)
+   
+  printCyanOnGrey("Found {} valid unmapped + {} with a potentially valid integration site".format(
+    len(procUnmappedReads["validUnmapped"]),
+    len(procUnmappedReads["validChimera"])))
+
+
+  #############################
+  # Compile reads
+  #############################
+  # TODO parse validIntegrationSites - save integration site, CBC, viral pos and refname + coverage
+  # TODO parse hostValidChimeras - save integration site, CBC, viral pos and refname + coverage
+  # TODO parse proviralValidChimeras - save CBC, viral pos and refname + coverage
+  # TODO parse unmappedreads - save integration site, CBC, viral pos and refaname + coverage
+
 
 
   #############################
