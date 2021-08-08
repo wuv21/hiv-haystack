@@ -369,104 +369,6 @@ def checkForPotentialHostClip(read, refLen, proviralSeqs, clipMinLen = 17, useAl
   return None
   
 
-# def checkForChimera(read1, read2, refLen, proviralSeqs, clipMinLen = 17, useAlts = None, softClipPad = 3):
-#   read1Info = {
-#     "start": read1.reference_start,
-#     "cigar": read1.cigar,
-#     "cigarstring": read1.cigarstring
-#   }
-#   read2Info = {
-#     "start": read2.reference_start,
-#     "cigar": read2.cigar,
-#     "cigarstring": read2.cigarstring
-#   }
-
-#   if useAlts is not None:
-#     read1Alts = useAlts[0]
-#     read2Alts = useAlts[1]
-
-#     if not (len(read1Alts) == 1 and len(read2Alts) == 1):
-#       return None
-    
-#     read1Info["start"] = int(read1Alts[0][1].lstrip("[+-]"))
-#     read1Info["cigarstring"] = read1Alts[0][2]
-
-#     read2Info["start"] = int(read2Alts[0][1].lstrip("[+-]"))
-#     read2Info["cigarstring"] = read2Alts[0][2]
-
-#     read1Clip = getSoftClip(read1, clipMinLen, softClipPad, useAlt = read1Info)
-#     read2Clip = getSoftClip(read2, clipMinLen, softClipPad, useAlt = read2Info)
-  
-#   else:
-#     read1Clip = getSoftClip(read1, clipMinLen, softClipPad)
-#     read2Clip = getSoftClip(read2, clipMinLen, softClipPad)
-
-#   read1Near5p = read1Info["start"] <= softClipPad
-#   read2Near3p = read2Info["start"] >= refLen - read2.query_length - softClipPad - 1
-  
-#   # proximity check
-#   if not read1Near5p and not read2Near3p:
-#     # print("{} is not close enough to LTR".format(read1.query_name))
-#     return None
-
-#   # can't have multiple soft clips in both reads
-#   if read1Clip is not None and read2Clip is not None:
-#     return None
-
-#   # verify length of substitution
-#   returnObj = {
-#     "chimericRead": None,
-#     "nonChimericRead": None,
-#     "hostSoftClip": None
-#   }
-#   if read1Near5p and read1Clip is not None:
-#     returnObj["chimericRead"] = read1
-#     returnObj["nonChimericRead"] = read2
-#     returnObj["hostSoftClip"] = read1Clip
-
-#   elif read2Near3p and read2Clip is not None:
-#     returnObj["chimericRead"] = read1
-#     returnObj["nonChimericRead"] = read2
-#     returnObj["hostSoftClip"] = read2Clip
-  
-#   else:
-#     return None
-
-#   clip = returnObj["hostSoftClip"]["clippedFrag"]
-#   if read1Clip is not None:
-#     provirusStart = read1Info["start"]
-
-#     clipPartial = clip[-1 * (provirusStart - 1): ]
-#     provirusActual = proviralSeqs[read1.reference_name][0][1:provirusStart]
-
-#     print("HERE {}".format(provirusStart))
-#     if provirusStart == 1:
-#       return returnObj
-#     elif provirusStart != 1 and clipPartial == provirusActual:
-#       return returnObj
-
-#   elif read2Clip is not None:
-#     provirusStart = read2Info["start"]
-#     fragmentLen = len(clip)
-#     readProviralLen = len(read2.seq) - fragmentLen
-
-#     proviralEnd = len(proviralSeqs[read1.reference_name][0])
-#     reqProviralEnd = proviralEnd - readProviralLen
-
-#     clipPartial = clip[:reqProviralEnd - proviralEnd]
-#     provirusActual = proviralSeqs[read2.reference_name][0][-1 * (reqProviralEnd - proviralEnd):]
-
-#     print("HERE {} {} {} {}".format(provirusStart, proviralEnd, readProviralLen, reqProviralEnd))
-
-#     if provirusStart == reqProviralEnd:
-#       return returnObj
-    
-#     elif provirusStart != reqProviralEnd and clipPartial == provirusActual:
-#       return returnObj
-
-#   return None
-
-
 def writeFasta(chimeras, hostClipFastaFn):
   records = []
   for chimera in chimeras:
@@ -595,9 +497,12 @@ def parseProviralReads(readPairs, proviralSeqs, hostClipFastaFn, clipMinLen = 17
       printRed("{}: please verify. Clip identified in both alt and normal align.".format(read1.qname))
     elif potentialAltChimera is not None:
       potentialValidChimeras.append(potentialAltChimera)
+      printRed(read1.to_string())
+      printRed(read2.to_string())
     elif potentialChimera is not None:
       potentialValidChimeras.append(potentialChimera)
-
+      printRed(read1.to_string())
+      printRed(read2.to_string())
   writeFasta(potentialValidChimeras, hostClipFastaFn)
 
   returnVal = {"validReads" : validReads, "potentialValidChimeras": potentialValidChimeras}
