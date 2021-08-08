@@ -631,7 +631,7 @@ def parseCellrangerBam(bamfile, proviralFastaIds, proviralReads, hostReadsWithPo
     cigarString = read.cigartuples
     # 4 is soft clip
     hasSoftClipAtEnd = cigarString != None and (cigarString[-1][0] == 4 or cigarString[0][0] == 4)
-    softClipInitThresh = 9
+    softClipInitThresh = 11
     softClipIsLongEnough = cigarString != None and (cigarString[-1][1] >= softClipInitThresh or cigarString[0][1] >= softClipInitThresh)
     
     # if read is properly mapped in a pair AND not proviral aligned AND there is soft clipping involved
@@ -757,8 +757,8 @@ def main(args):
     # import files
     dualProviralAlignedReads = importProcessedBam(outputFNs["proviralReads"],
       returnDict = True)
-    #hostReadsWithPotentialChimera = importProcessedBam(outputFNs["hostWithPotentialChimera"],
-     # returnDict = True)
+    hostReadsWithPotentialChimera = importProcessedBam(outputFNs["hostWithPotentialChimera"],
+      returnDict = True)
     unmappedPotentialChimera = importProcessedBam(outputFNs["umappedWithPotentialChimera"],
       returnDict = True)
 
@@ -770,6 +770,7 @@ def main(args):
   printGreen("Finding valid chimeras from host reads")
   hostValidChimeras = parseHostReadsWithPotentialChimera(hostReadsWithPotentialChimera,
    potentialLTR,
+   proviralSeqs = proviralSeqs,
    clipMinLen = args.LTRClipLen)
   
   printGreen("Finding valid chimeras from proviral reads")
