@@ -390,7 +390,6 @@ def writeFasta(chimeras, hostClipFastaFn):
   records = []
   for qnameKey in chimeras:
     chimera = chimeras[qnameKey]
-    
     if chimera["adjustedHostSoftClip"] is not None:
       seq = Seq(chimera["adjustedHostSoftClip"])
     else:
@@ -581,7 +580,7 @@ def parseUnmappedReads(readPairs, proviralSeqs, proviralLTRSeqs, LTRClipMinLen =
 
     # special case. #TODO add this case.
     if hostReadSubs == 1 and viralReadSubs == 1:
-      printRed("Soft clip detected in both host and viral")
+      printRed("{}: Soft clip detected in both host and viral".format(viralRead.query_name))
 
     # host read soft clip
     elif hostReadSubs == 1:
@@ -591,7 +590,7 @@ def parseUnmappedReads(readPairs, proviralSeqs, proviralLTRSeqs, LTRClipMinLen =
       
       potentialHits = isSoftClipProviral(hostRead, proviralLTRSeqs, proviralSeqs, LTRClipMinLen)
       if potentialHits:
-        validChimera.append(readPair)
+        validChimera.append({"readPair": readPair, "chimericRead": potentialHits})
       else:
         validUnmapped.append(readPair)
 
@@ -622,7 +621,8 @@ def parseUnmappedReads(readPairs, proviralSeqs, proviralLTRSeqs, LTRClipMinLen =
     else:
       validUnmapped.append(readPair)
 
-  return {"validChimera": validChimera,
+  return {
+    "validChimera": validChimera,
     "validUnmapped": validUnmapped,
     "potentialChimera": potentialChimera}
 
@@ -837,9 +837,9 @@ def main(args):
     cellrangerBam,
     proviralValidChimeras["validReads"])
 
-  writeBam(outputFNs["validProviralReadsWithPotentialChimera"],
-    cellrangerBam,
-    [x["read"] for x in proviralValidChimeras["potentialValidChimeras"]])
+  # writeBam(outputFNs["validProviralReadsWithPotentialChimera"],
+  #   cellrangerBam,
+  #   [x["read"] for x in proviralValidChimeras["potentialValidChimeras"]])
   cellrangerBam.close()
 
 
