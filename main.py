@@ -178,21 +178,12 @@ def getSoftClip(read, clipMinLen, softClipPad, useAlt = None):
     return clippedFragObj
 
 
-def isSoftClipProviral(read, proviralLTRSeqs, proviralSeqs, clipMinLen = 11, softClipPad = 3, ignoreOrient = False):
+def isSoftClipProviral(read, proviralLTRSeqs, proviralSeqs, clipMinLen = 11, softClipPad = 3):
   clippedFragObj = getSoftClip(read, clipMinLen, softClipPad)
   
   # skip if no clipped fragment long enough is found
   if clippedFragObj is None:
     return False
-
-  # soft clip position has to match correct forward/reverse strandness of read
-  # if 5', read has to be forward to not exit
-  # if not ignoreOrient:
-  #   if clippedFragObj["clip5Present"] and read.flag & 32:
-  #     return False
-  #   # if 3', read has to be reverse strand to not exit
-  #   elif clippedFragObj["clip3Present"] and read.flag & 16:
-  #     return False
 
   strClippedFrag = str(clippedFragObj["clippedFrag"])
 
@@ -571,7 +562,7 @@ def parseUnmappedReads(readPairs, proviralSeqs, proviralLTRSeqs, LTRClipMinLen =
       if tmp is not None:
         print(tmp)
       
-      potentialHits = isSoftClipProviral(hostRead, proviralLTRSeqs, proviralSeqs, LTRClipMinLen, ignoreOrient = True)
+      potentialHits = isSoftClipProviral(hostRead, proviralLTRSeqs, proviralSeqs, LTRClipMinLen)
       if potentialHits:
         validChimera.append(readPair)
       else:
