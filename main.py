@@ -202,9 +202,7 @@ def isSoftClipProviral(read, proviralLTRSeqs, proviralSeqs, clipMinLen = 11, sof
   
   hits = {
     "plus": [],
-    "plusIds": [],
     "minus" : [],
-    "minusIds": [],
     "clip5P": clippedFragObj["clip5Present"],
     "clip3P": clippedFragObj["clip3Present"]}
 
@@ -307,7 +305,8 @@ def parseHostReadsWithPotentialChimera(readPairs, proviralLTRSeqs, proviralSeqs,
     
     validHits = isSoftClipProviral(read, proviralLTRSeqs, proviralSeqs, clipMinLen)
     if validHits:
-      pprint(validHits)
+      print(str(validHits['minus']))
+      print(str(validHits['plus']))
       validChimeras.append(validHits)
 
   return validChimeras
