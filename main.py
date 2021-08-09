@@ -165,7 +165,7 @@ def getSoftClip(read, clipMinLen, softClipPad, useAlt = None):
     if clip5Present:
       adjacentPos = read.reference_start + len(clippedFrag)
     else:
-      adjacentPos = len(read.query_sequence) - len(clippedFrag) - 1
+      adjacentPos = read.reference_start + (len(read.query_sequence) - len(clippedFrag) - 1)
 
     clippedFragObj = {
       "clippedFrag": clippedFrag,
@@ -188,10 +188,10 @@ def isSoftClipProviral(read, proviralLTRSeqs, proviralSeqs, clipMinLen = 11, sof
   # soft clip position has to match correct forward/reverse strandness of read
   # if 5', read has to be forward to not exit
   if not ignoreOrient:
-    if clippedFragObj["clip5Present"] and read.flag & 16:
+    if clippedFragObj["clip5Present"] and read.flag & 32:
       return False
     # if 3', read has to be reverse strand to not exit
-    elif clippedFragObj["clip3Present"] and read.flag & 32:
+    elif clippedFragObj["clip3Present"] and read.flag & 16:
       return False
 
   strClippedFrag = str(clippedFragObj["clippedFrag"])
