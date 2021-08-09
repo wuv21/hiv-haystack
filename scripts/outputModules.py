@@ -20,7 +20,7 @@ class ProviralFragment(object):
     self.usingAlt = usingAlt
 
   def __str__(self):
-    return "{} {} {} {}".format(self.seqname, self.startBp, self.endBp)
+    return "{} {} {}".format(self.seqname, self.startBp, self.endBp)
 
   
 class ChimericRead(object):
