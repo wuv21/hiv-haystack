@@ -627,7 +627,9 @@ def parseCellrangerBam(bamfile, proviralFastaIds, proviralReads, hostReadsWithPo
     # 4 is soft clip
     hasSoftClipAtEnd = cigarString != None and (cigarString[-1][0] == 4 or cigarString[0][0] == 4)
     softClipInitThresh = 11
-    softClipIsLongEnough = cigarString != None and (cigarString[-1][1] >= softClipInitThresh or cigarString[0][1] >= softClipInitThresh)
+    softClipIsLongEnough = cigarString != None and \
+      ((cigarString[-1][0] == 4 and cigarString[-1][1] >= softClipInitThresh) or \
+        (cigarString[0][0] == 4 and cigarString[0][1] >= softClipInitThresh))
     
     # if read is properly mapped in a pair AND not proviral aligned AND there is soft clipping involved
     if (read.flag & 2) and (not refnameIsProviral) and (hasSoftClipAtEnd and softClipIsLongEnough):
