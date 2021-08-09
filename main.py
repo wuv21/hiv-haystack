@@ -296,8 +296,8 @@ def parseHostReadsWithPotentialChimera(readPairs, proviralLTRSeqs, proviralSeqs,
     
     validHits = isSoftClipProviral(read, proviralLTRSeqs, proviralSeqs, clipMinLen)
     if validHits:
-      print([str(x) for x in validHits['minus']])
-      print([str(x) for x in validHits['plus']])
+      printBlue([str(x) for x in validHits['minus']])
+      printBlue([str(x) for x in validHits['plus']])
       validChimeras.append(validHits)
 
   return validChimeras
@@ -315,7 +315,6 @@ def getAltAlign(read):
   altAligns = [x.split(",") for x in altAligns]
 
   return altAligns
-
 
 
 def checkForPotentialHostClip(read, refLen, proviralSeqs, clipMinLen = 17, useAlts = None, softClipPad = 3):
@@ -341,26 +340,26 @@ def checkForPotentialHostClip(read, refLen, proviralSeqs, clipMinLen = 17, useAl
     # print("{} is not close enough to LTR".format(read1.query_name))
     return None
 
-  returnObj = {
-    "read": read,
-    "hostSoftClip": readClip
-  }
-
   clip = readClip["clippedFrag"]
   provirusStart = readInfo["start"]
-  if readNear5p:
-    adjustment = 
-    clipPartial = clip[-1 * (provirusStart - 1): ]
-    provirusActual = proviralSeqs[read.reference_name][0][1:provirusStart]
-    print("HERE {} {}".format(read.to_string, provirusStart))
 
-    if provirusStart == 1:
+  returnObj = {
+    "read": read,
+    "hostSoftClip": readClip,
+    "adjustment": 0,
+    "provirusStart": provirusStart
+  }
+
+  if readNear5p:
+    adjustment = 0 - provirusStart
+    clipPartial = clip[adjustment: ]
+    provirusActual = proviralSeqs[read.reference_name][0][0:provirusStart]
+
+    if provirusStart == 0:
       return returnObj
-    elif provirusStart != 1 and clipPartial == provirusActual:
+    elif provirusStart != 0 and clipPartial == provirusActual:
       return returnObj
   
-  #TODO fix adjustment here...
-
   elif readNear3p:
     fragmentLen = len(clip)
     readProviralLen = len(read.seq) - fragmentLen
@@ -377,6 +376,7 @@ def checkForPotentialHostClip(read, refLen, proviralSeqs, clipMinLen = 17, useAl
       return returnObj
     
     elif provirusStart != reqProviralStartPos and clipPartial == provirusActual:
+      returnObj["adjustment"] = adjustment
       return returnObj
 
   return None
@@ -385,8 +385,6 @@ def checkForPotentialHostClip(read, refLen, proviralSeqs, clipMinLen = 17, useAl
 def writeFasta(chimeras, hostClipFastaFn):
   records = []
   for chimera in chimeras:
-    
-    print(chimera["hostSoftClip"]["clippedFrag"])
     record = SeqRecord(
       id = chimera["read"].qname,
       seq = Seq(chimera["hostSoftClip"]["clippedFrag"]),
