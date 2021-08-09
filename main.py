@@ -241,7 +241,7 @@ def isSoftClipProviral(read, proviralLTRSeqs, proviralSeqs, clipMinLen = 11, sof
       elif (ltrType == "3p" or ltrType == "5pRevComp") and max(matches) != ltrLen - softClipPad:
         adjustment = ltrLen - max(matches) - len(strClippedFrag)
         ltrEnd = str(s)[max(matches) + len(strClippedFrag): ltrLen]
-        hostAdjacentSeq = clippedFragObj["adjacentFrag"][0:adjustment + len(strClippedFrag)]
+        hostAdjacentSeq = clippedFragObj["adjacentFrag"][0:adjustment]
         
       if ltrEnd != "" and ltrEnd != hostAdjacentSeq:
         print("{}: Viral clip not found at the end of LTR".format(read.query_name))
@@ -347,9 +347,9 @@ def checkForPotentialHostClip(read, refLen, proviralSeqs, clipMinLen = 17, useAl
   }
 
   clip = readClip["clippedFrag"]
+  provirusStart = readInfo["start"]
   if readNear5p:
-    provirusStart = readInfo["start"]
-
+    adjustment = 
     clipPartial = clip[-1 * (provirusStart - 1): ]
     provirusActual = proviralSeqs[read.reference_name][0][1:provirusStart]
     print("HERE {} {}".format(read.to_string, provirusStart))
@@ -358,22 +358,25 @@ def checkForPotentialHostClip(read, refLen, proviralSeqs, clipMinLen = 17, useAl
       return returnObj
     elif provirusStart != 1 and clipPartial == provirusActual:
       return returnObj
+  
+  #TODO fix adjustment here...
 
   elif readNear3p:
-    provirusStart = readInfo["start"]
     fragmentLen = len(clip)
     readProviralLen = len(read.seq) - fragmentLen
 
     proviralEnd = len(proviralSeqs[read.reference_name][0])
-    reqProviralEnd = proviralEnd - readProviralLen
+    reqProviralStartPos = proviralEnd - readProviralLen
+    
+    adjustment = reqProviralStartPos - read.reference_start
 
-    clipPartial = clip[:reqProviralEnd - proviralEnd]
-    provirusActual = proviralSeqs[read.reference_name][0][-1 * (reqProviralEnd - proviralEnd):]
+    clipPartial = clip[:adjustment]
+    provirusActual = proviralSeqs[read.reference_name][0][-1 * adjustment:]
 
-    if provirusStart == reqProviralEnd:
+    if provirusStart == reqProviralStartPos:
       return returnObj
     
-    elif provirusStart != reqProviralEnd and clipPartial == provirusActual:
+    elif provirusStart != reqProviralStartPos and clipPartial == provirusActual:
       return returnObj
 
   return None
@@ -478,7 +481,7 @@ def parseProviralReads(readPairs, proviralSeqs, hostClipFastaFn, clipMinLen = 17
       read1AltCheck = None
       read2AltCheck = None
       if len(read1Alts) > 1 or len(read2Alts) > 1:
-        print("{}: has multiple alt aligns. Verify manually.".format(read1.qname))
+        printRed("{}: has multiple alt aligns. Verify manually.".format(read1.qname))
       
       if len(read1Alts) == 1:
         read1AltCheck = checkForPotentialHostClip(read1, refLen, proviralSeqs = proviralSeqs,
@@ -507,12 +510,12 @@ def parseProviralReads(readPairs, proviralSeqs, hostClipFastaFn, clipMinLen = 17
       printRed("{}: please verify. Clip identified in both alt and normal align.".format(read1.qname))
     elif potentialAltChimera is not None:
       potentialValidChimeras.append(potentialAltChimera)
-      printRed(read1.to_string())
-      printRed(read2.to_string())
+      printBlue(read1.to_string())
+      printBlue(read2.to_string())
     elif potentialChimera is not None:
       potentialValidChimeras.append(potentialChimera)
-      printRed(read1.to_string())
-      printRed(read2.to_string())
+      printBlue(read1.to_string())
+      printBlue(read2.to_string())
   writeFasta(potentialValidChimeras, hostClipFastaFn)
 
   returnVal = {"validReads" : validReads, "potentialValidChimeras": potentialValidChimeras}
