@@ -223,7 +223,6 @@ def isSoftClipProviral(read, proviralLTRSeqs, proviralSeqs, clipMinLen = 11, sof
 
       ltrLen = len(str(s))
       # check if match is within soft buffer zone
-      # needs to pass min(matches) <= softClipPad or max(matches) + len(strClippedFrag) >= ltrLen - softClipPad:
       if (ltrType == "5p" or ltrType == "3pRevComp") and min(matches) > softClipPad:
         continue
       elif (ltrType == "3p" or ltrType == "5pRevComp") and max(matches) + len(strClippedFrag) < ltrLen - softClipPad:
@@ -394,7 +393,7 @@ def writeFasta(chimeras, hostClipFastaFn):
       seq = Seq(chimera["adjustedHostSoftClip"])
     else:
       seq = Seq(chimera["hostSoftClip"]["clippedFrag"])
-
+    
     record = SeqRecord(
       id = chimera["read"].qname,
       seq = seq,
@@ -539,6 +538,7 @@ def parseProviralReads(readPairs, proviralSeqs, hostClipFastaFn, clipMinLen = 17
       potentialValidChimeras[read1.qname] = potentialChimera
       printBlue(read1.to_string())
       printBlue(read2.to_string())
+
   writeFasta(potentialValidChimeras, hostClipFastaFn)
 
   returnVal = {"validReads" : validReads, "potentialValidChimeras": potentialValidChimeras}
@@ -798,7 +798,10 @@ def main(args):
     hostGenomeIndex = args.hostGenomeIndex,
     potentialChimeras = proviralValidChimeras["potentialValidChimeras"],
     hostClipLen = args.hostClipLen)
-
+  
+  for k in validIntegrationSites:
+    print(str(validIntegrationSites[k][0]))
+  
   printGreen("Finding valid unmapped reads that might span between integration site")
   procUnmappedReads = parseUnmappedReads(unmappedPotentialChimera,
     proviralSeqs,
