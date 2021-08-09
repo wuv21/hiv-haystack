@@ -248,10 +248,10 @@ def isSoftClipProviral(read, proviralLTRSeqs, proviralSeqs, clipMinLen = 11, sof
         hostAdjacentSeq = clippedFragObj["adjacentFrag"][adjustment:]
 
       elif (ltrType == "3p" or ltrType == "5pRevComp") and max(matches) != ltrLen - softClipPad:
-        adjustment = ltrLen - max(matches)
+        adjustment = ltrLen - max(matches) - len(strClippedFrag)
         ltrEnd = str(s)[max(matches) + len(strClippedFrag): ltrLen]
-        hostAdjacentSeq = clippedFragObj["adjacentFrag"][0:adjustment]
-
+        hostAdjacentSeq = clippedFragObj["adjacentFrag"][0:adjustment + len(strClippedFrag)]
+        
       if ltrEnd != "" and ltrEnd != hostAdjacentSeq:
         print("{}: Viral clip not found at the end of LTR".format(read.query_name))
         continue
@@ -261,7 +261,7 @@ def isSoftClipProviral(read, proviralLTRSeqs, proviralSeqs, clipMinLen = 11, sof
       
       if ltrType == "5p" or ltrType == "5pRevComp":
         proviralStartPos = 0
-        proviralEndPos = len(clippedFragObj["clippedFrag"]) + abs(adjustment) 
+        proviralEndPos = len(clippedFragObj["clippedFrag"]) + abs(adjustment) - 1
       elif ltrType == "3p" or ltrType == "3pRevComp":
         proviralStartPos = len(proviralSeqs[key][0]) - len(clippedFragObj["clippedFrag"]) - abs(adjustment)
         proviralEndPos = len(proviralSeqs[key][0]) - 1
@@ -305,8 +305,8 @@ def parseHostReadsWithPotentialChimera(readPairs, proviralLTRSeqs, proviralSeqs,
     
     validHits = isSoftClipProviral(read, proviralLTRSeqs, proviralSeqs, clipMinLen)
     if validHits:
-      print(str(validHits['minus']))
-      print(str(validHits['plus']))
+      print([str(x) for x in validHits['minus']])
+      print([str(x) for x in validHits['plus']])
       validChimeras.append(validHits)
 
   return validChimeras

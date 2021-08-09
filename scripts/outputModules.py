@@ -6,7 +6,7 @@ class IntegrationSite(object):
     self.pos = pos
 
   def __str__(self):
-    return("Int site at {} {}".format(self.chr, self.pos))
+    return("int site at {}:{}".format(self.chr, self.pos))
 
 
 class ProviralFragment(object):
@@ -19,6 +19,9 @@ class ProviralFragment(object):
     self.orient = orient
     self.usingAlt = usingAlt
 
+  def __str__(self):
+    return "{} {} {} {}".format(self.seqname, self.startBp, self.endBp, self.orient)
+
   
 class ChimericRead(object):
   def __init__(self, read, intsite, proviralFragment):
@@ -29,7 +32,7 @@ class ChimericRead(object):
     self.proviralFragment = proviralFragment
 
   def __str__(self):
-    return("{} is chimeric read with {} an int site".format(self.read.qname, self.intsite))
+    return "{} is chimeric read with {}. Proviral fragment: {}".format(self.read.qname, str(self.intsite), str(self.proviralFragment))
 
 
 class ReadPairWithChimericRead(object):
