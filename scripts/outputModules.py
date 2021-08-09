@@ -1,22 +1,22 @@
 class IntegrationSite(object):
-  def __init__(self, chr, pos):
+  def __init__(self, chr, orient, pos):
     super().__init__()
 
     self.chr = chr
+    self.orient = orient
     self.pos = pos
 
   def __str__(self):
-    return("int site at {}:{}".format(self.chr, self.pos))
+    return("int site at {}{}{}".format(self.chr, self.orient, self.pos))
 
 
 class ProviralFragment(object):
-  def __init__(self, seqname, startBp, endBp, orient, usingAlt = None):
+  def __init__(self, seqname, startBp, endBp, usingAlt = None):
     super().__init__()
     
     self.seqname = seqname
     self.startBp = startBp
     self.endBp = endBp
-    self.orient = orient
     self.usingAlt = usingAlt
 
   def __str__(self):

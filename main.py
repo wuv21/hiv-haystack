@@ -259,11 +259,11 @@ def isSoftClipProviral(read, proviralLTRSeqs, proviralSeqs, clipMinLen = 11, sof
 
       intsite = IntegrationSite(
         chr = read.reference_name,
+        orient = "-" if orient == "minus" else "+",
         pos = clippedFragObj["adjacentPosToClip"] + adjustment)
 
       proviralFrag = ProviralFragment(
         seqname = key,
-        orient = orient,
         startBp = proviralStartPos,
         endBp = proviralEndPos,
         usingAlt = None
@@ -347,6 +347,7 @@ def checkForPotentialHostClip(read, refLen, proviralSeqs, clipMinLen = 17, useAl
     "read": read,
     "hostSoftClip": readClip,
     "adjustment": 0,
+    "adjustedHostSoftClip": None,
     "provirusStart": provirusStart
   }
 
@@ -358,6 +359,8 @@ def checkForPotentialHostClip(read, refLen, proviralSeqs, clipMinLen = 17, useAl
     if provirusStart == 0:
       return returnObj
     elif provirusStart != 0 and clipPartial == provirusActual:
+      returnObj["adjustment"] = adjustment
+      returnObj["adjustedHostSoftClip"] = clip[:len(clip) + adjustment]
       return returnObj
   
   elif readNear3p:
@@ -377,6 +380,7 @@ def checkForPotentialHostClip(read, refLen, proviralSeqs, clipMinLen = 17, useAl
     
     elif provirusStart != reqProviralStartPos and clipPartial == provirusActual:
       returnObj["adjustment"] = adjustment
+      returnObj["adjustedHostSoftClip"] = clip[adjustment:]
       return returnObj
 
   return None
@@ -385,9 +389,14 @@ def checkForPotentialHostClip(read, refLen, proviralSeqs, clipMinLen = 17, useAl
 def writeFasta(chimeras, hostClipFastaFn):
   records = []
   for chimera in chimeras:
+    if chimera["adjustedHostSoftClip"] is not None:
+      seq = Seq(chimera["adjustedHostSoftClip"])
+    else:
+      seq = Seq(chimera["hostSoftClip"]["clippedFrag"])
+
     record = SeqRecord(
       id = chimera["read"].qname,
-      seq = Seq(chimera["hostSoftClip"]["clippedFrag"]),
+      seq = seq,
       description = ""
     )
 
@@ -396,7 +405,7 @@ def writeFasta(chimeras, hostClipFastaFn):
   SeqIO.write(records, hostClipFastaFn, "fasta")
 
 
-def alignClipToHost(fafile, hostGenomeIndex, hostClipLen = 17):
+def alignClipToHost(fafile, hostGenomeIndex, potentialChimeras, hostClipLen = 17):
   if not os.path.exists(fafile) or os.stat(fafile).st_size == 0:
     printGreen("No records in fasta file. Skipping alignment.") 
     return None
@@ -429,14 +438,29 @@ def alignClipToHost(fafile, hostGenomeIndex, hostClipLen = 17):
     elif rec.qname in qnamesWithMultipleHits:
       continue
     
-    validIntSites[rec.qname].append(rec)
+
+    # check orientation of alignment
+    currentChimera = potentialChimeras[rec.qname]
+    if currentChimera["adjustment"] != 0:
+      if str(currentChimera["adjustedHostSoftClip"]) != str(rec.seq):
+        orient = "-"
+      else:
+        orient = "+"
+    else:
+      if str(currentChimera["hostSoftClip"]["clippedFrag"] != str(rec.seq)):
+        orient = "-"
+      else:
+        orient = "+"
+
+    intsite = IntegrationSite(rec.reference_name, orient, rec.reference_start)
+    validIntSites[rec.qname].append(intsite)
 
   return validIntSites
 
 
 def parseProviralReads(readPairs, proviralSeqs, hostClipFastaFn, clipMinLen = 17):
   validReads = []
-  potentialValidChimeras = []
+  potentialValidChimeras = defaultdict()
 
   for rpName in readPairs:
     # must be paired
@@ -507,11 +531,11 @@ def parseProviralReads(readPairs, proviralSeqs, hostClipFastaFn, clipMinLen = 17
     if potentialAltChimera is not None and potentialChimera is not None:
       printRed("{}: please verify. Clip identified in both alt and normal align.".format(read1.qname))
     elif potentialAltChimera is not None:
-      potentialValidChimeras.append(potentialAltChimera)
+      potentialValidChimeras[read1.qname] = potentialAltChimera
       printBlue(read1.to_string())
       printBlue(read2.to_string())
     elif potentialChimera is not None:
-      potentialValidChimeras.append(potentialChimera)
+      potentialValidChimeras[read1.qname] = potentialChimera
       printBlue(read1.to_string())
       printBlue(read2.to_string())
   writeFasta(potentialValidChimeras, hostClipFastaFn)
@@ -766,10 +790,11 @@ def main(args):
     hostClipFastaFn = outputFNs["viralReadHostClipFasta"],
     clipMinLen = args.hostClipLen)
     
-  printCyanOnGrey("Found {} potential valid chimera(s)".format(len(proviralValidChimeras["potentialValidChimeras"])))
+  printCyanOnGrey("Found {} potential valid chimera(s)".format(len(proviralValidChimeras["potentialValidChimeras"].keys())))
   printGreen("Aligning host clips found on viruses to host genome")
   validIntegrationSites = alignClipToHost(fafile=outputFNs["viralReadHostClipFasta"],
     hostGenomeIndex = args.hostGenomeIndex,
+    potentialChimeras = proviralValidChimeras["potentialValidChimeras"],
     hostClipLen = args.hostClipLen)
 
   printGreen("Finding valid unmapped reads that might span between integration site")
