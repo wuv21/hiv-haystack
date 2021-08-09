@@ -388,7 +388,9 @@ def checkForPotentialHostClip(read, refLen, proviralSeqs, clipMinLen = 17, useAl
 
 def writeFasta(chimeras, hostClipFastaFn):
   records = []
-  for chimera in chimeras:
+  for qnameKey in chimeras:
+    chimera = chimeras[qnameKey]
+    
     if chimera["adjustedHostSoftClip"] is not None:
       seq = Seq(chimera["adjustedHostSoftClip"])
     else:
