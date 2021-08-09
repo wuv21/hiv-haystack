@@ -92,8 +92,6 @@ def parseLTRMatches(LTRargs, proviralSeqs, position = False, endBuffer = 20):
         # index 9 = subject end
         
         subjID = row[1]
-        # qstart = row[6]
-        # qend = row[7]
         sstart = int(row[8])
         send = int(row[9])
         slen = len(proviralSeqs[subjID][0])
@@ -308,7 +306,6 @@ def parseHostReadsWithPotentialChimera(readPairs, proviralLTRSeqs, proviralSeqs,
      continue
     
     validHits = isSoftClipProviral(read, proviralLTRSeqs, proviralSeqs, clipMinLen)
-    
     if validHits:
       pprint(validHits)
       validChimeras.append(validHits)
@@ -324,7 +321,6 @@ def getAltAlign(read):
   
   # remove last semicolon
   altAlignRaw = altAlignRaw[:-1]
-
   altAligns = altAlignRaw.split(";")
   altAligns = [x.split(",") for x in altAligns]
 
@@ -576,7 +572,7 @@ def parseUnmappedReads(readPairs, proviralSeqs, proviralLTRSeqs, LTRClipMinLen =
       if tmp is not None:
         print(tmp)
       
-      potentialHits = isSoftClipProviral(hostRead, proviralLTRSeqs, LTRClipMinLen, ignoreOrient = True)
+      potentialHits = isSoftClipProviral(hostRead, proviralLTRSeqs, proviralSeqs, LTRClipMinLen, ignoreOrient = True)
       if potentialHits:
         validChimera.append(readPair)
       else:
@@ -650,7 +646,6 @@ def parseCellrangerBam(bamfile, proviralFastaIds, proviralReads, hostReadsWithPo
       unmappedPotentialChimera[read.query_name].append(read)
     
     readIndex += 1
-    
     if readIndex % 10000000 == 0:
       print("Parsed {} reads".format(str(readIndex)))
 
@@ -704,7 +699,6 @@ def main(args):
   for k in outputFNs:
     outputFNs[k] = args.outputDir + "/" + outputFNs[k]
 
-  
   # set up initial dictionaries
   dualProviralAlignedReads = defaultdict(list)
   hostReadsWithPotentialChimera = defaultdict(list)
@@ -726,7 +720,6 @@ def main(args):
   elif args.LTRpositions is not None:
     printGreen("LTR positions provided as {}".format(args.LTRpositions))
     potentialLTR = parseLTRMatches(args.LTRpositions, proviralSeqs, position = True)
-
 
   #############################
   # Parse or load BAM files
@@ -798,7 +791,6 @@ def main(args):
   printCyanOnGrey("Found {} valid unmapped + {} with a potentially valid integration site".format(
     len(procUnmappedReads["validUnmapped"]),
     len(procUnmappedReads["validChimera"])))
-
 
   #############################
   # Compile reads

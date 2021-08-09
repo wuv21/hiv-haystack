@@ -5,3 +5,4 @@ fasta
 outBam
 tempRun
 bsub
+__pycache__
