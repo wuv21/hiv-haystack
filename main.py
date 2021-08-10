@@ -774,7 +774,7 @@ def main(args):
     hostClipMinLen = args.hostClipLen)
    
   printCyanOnGrey("Found {} valid unmapped + {} with a potentially valid integration site".format(
-    len(procUnmappedReads["validUnmapped"]),
+    len(procUnmappedReads["viralFrags"]),
     len(procUnmappedReads["validChimera"])))
 
   unmappedValidIntegrationSites = alignClipToHost(fafile = outputFNs["unmappedHostClipFasta"],
@@ -804,12 +804,13 @@ def main(args):
     print(str(validIntegrationSites[k][0]))
 
   printRed("procUnmappedReads from viral unmapped")
-  for k in procUnmappedReads["validUnmapped"]:
+  for k in procUnmappedReads["viralFrags"]:
     print(str(k))
 
   printRed("unamppedValidIntegrationSites")
-  for k in unmappedValidIntegrationSites:
-    print(str(unmappedValidIntegrationSites[k][0]))
+  if unmappedValidIntegrationSites is not None:
+    for k in unmappedValidIntegrationSites:
+      print(str(unmappedValidIntegrationSites[k][0]))
 
 
   #############################
