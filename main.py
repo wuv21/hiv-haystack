@@ -8,16 +8,10 @@ import csv
 import re
 import subprocess
 from pprint import pprint
-from termcolor import cprint
 from scripts.outputModules import *
 from scripts.baseFunctions import *
 from scripts.io import *
-
-printRed = lambda x: cprint(x, "red")
-printGreen = lambda x: cprint(x, "green")
-printCyan = lambda x: cprint(x, "cyan")
-printBlue = lambda x: cprint(x, "blue")
-printCyanOnGrey = lambda x: cprint(x, "cyan", "on_grey")
+from scripts.terminalPrinting import *
 
 
 def getProviralFastaIDs(fafile, recordSeqs):
@@ -27,6 +21,7 @@ def getProviralFastaIDs(fafile, recordSeqs):
     recordSeqs[record.id].append(record.seq)
 
   return ids
+
 
 def getLTRseq(seq, start, end):
   ltrSeq = seq[start - 1:end]
