@@ -556,7 +556,7 @@ def parseUnmappedReads(readPairs, proviralSeqs, proviralLTRSeqs, unmappedHostCli
 
     proviralFrag = ProviralFragment()
     proviralFrag.setFromRead(viralRead)
-    proviralFrag.usingAlt(getAltAlign(viralRead))
+    proviralFrag.setAlt(getAltAlign(viralRead))
     
     # can't have mulutiple soft clips present
     if hostReadSubs + viralReadSubs > 1:
