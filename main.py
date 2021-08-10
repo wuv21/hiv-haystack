@@ -421,7 +421,7 @@ def alignClipToHost(fafile, hostGenomeIndex, potentialChimeras, hostClipLen = 17
       cbc = extractCellBarcode(currentChimera["read"])
     )
     chimera = ChimericRead(
-      read = currentChimera["read"].reference_name,
+      read = currentChimera["read"],
       intsite = intsite,
       proviralFragment = proviralFrag
     )
@@ -779,10 +779,13 @@ def main(args):
   # TODO parse unmappedreads - save integration site, CBC, viral pos and refaname + coverage
 
   printRed("hostValidChimeras")
-  pprint(hostValidChimeras)
+  for v in hostValidChimeras:
+    printBlue(str(v['minus'][0]) if len(v['minus']) != 0 else str(v['plus'][0]))
 
   printRed("proviralValidChimeras[validReads]")
-  pprint(proviralProcessedReads["validReads"])
+  for p in proviralProcessedReads["validReads"][0:10]:
+    printBlue(str(p.read1))
+    printBlue(str(p.read2))
 
   printRed("validIntegrationSites from proviral valid chimeras")
   for k in validIntegrationSites:
