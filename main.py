@@ -238,7 +238,8 @@ def isSoftClipProviral(read, proviralLTRSeqs, proviralSeqs, clipMinLen = 11, sof
         orient = "-" if orient == "minus" else "+",
         pos = clippedFragObj["adjacentPosToClip"] + adjustment)
 
-      proviralFrag = ProviralFragment(
+      proviralFrag = ProviralFragment()
+      proviralFrag.setManually(
         seqname = key,
         startBp = proviralStartPos,
         endBp = proviralEndPos,
@@ -358,6 +359,7 @@ def checkForPotentialHostClip(read, refLen, proviralSeqs, clipMinLen = 17, useAl
     elif provirusStart != reqProviralStartPos and clipPartial == provirusActual:
       returnObj["adjustment"] = adjustment
       returnObj["adjustedHostSoftClip"] = clip[adjustment:]
+      returnObj["provirusStart"] = reqProviralStartPos
       return returnObj
 
   return None
@@ -411,7 +413,20 @@ def alignClipToHost(fafile, hostGenomeIndex, potentialChimeras, hostClipLen = 17
         orient = "+"
 
     intsite = IntegrationSite(rec.reference_name, orient, rec.reference_start)
-    validIntSites[rec.qname].append(intsite)
+    proviralFrag = ProviralFragment()
+    proviralFrag.setManually(
+      seqname = currentChimera["read"].reference_name,
+      startBp = currentChimera["provirusStart"],
+      endBp = currentChimera["read"].reference_end - 1,
+      cbc = extractCellBarcode(currentChimera["read"])
+    )
+    chimera = ChimericRead(
+      read = currentChimera["read"].reference_name,
+      intsite = intsite,
+      proviralFragment = proviralFrag
+    )
+
+    validIntSites[rec.qname].append(chimera)
 
   return validIntSites
 
@@ -436,24 +451,33 @@ def parseProviralReads(readPairs, proviralSeqs, hostClipFastaFn, clipMinLen = 17
     if read1.is_unmapped or read2.is_unmapped:
       continue
     
-    # add to allowed proviral reads...
-    validReads.append(read1)
-    validReads.append(read2)
-
     # rearrange depending on where alignment is
     if read1.reference_start > read2.reference_start:
       read1, read2 = read2, read1
-    
-    # skip if there's multiple soft clips
-    if read1.cigarstring.count("S") + read2.cigarstring.count("S") > 1:
-      continue
 
     # move on to chimera analysis
     refLen = len(proviralSeqs[read1.reference_name][0])
     read1AllAlts = getAltAlign(read1)
     read2AllAlts = getAltAlign(read2)
 
+    # add to allowed proviral reads...
+    rd1ProviralFrag = ProviralFragment()
+    rd1ProviralFrag.setFromRead(read1)
+    rd1ProviralFrag.setAlt(None if len(read1AllAlts) == 0 else read1AllAlts)
+
+    rd2ProviralFrag = ProviralFragment()
+    rd2ProviralFrag.setFromRead(read2)
+    rd2ProviralFrag.setAlt(None if len(read2AllAlts) == 0 else read2AllAlts)
+
+    rdPair = ReadPairDualProviral(read1 = rd1ProviralFrag, read2 = rd2ProviralFrag)
+    validReads.append(rdPair)
+
+    # skip if there's multiple soft clips
+    if read1.cigarstring.count("S") + read2.cigarstring.count("S") > 1:
+      continue
+
     potentialAltChimera = None
+    readContainingChimera = ""
     if read1AllAlts is not None and read2AllAlts is not None:
       read1Alts = [alt for alt in read1AllAlts if alt[0] == read1.reference_name]
       read2Alts = [alt for alt in read2AllAlts if alt[0] == read2.reference_name]
@@ -472,8 +496,10 @@ def parseProviralReads(readPairs, proviralSeqs, hostClipFastaFn, clipMinLen = 17
 
       if read1AltCheck is None and read2AltCheck is not None:
         potentialAltChimera = read2AltCheck
+        readContainingChimera = "read2"
       elif read1AltCheck is not None and read2AltCheck is None:
         potentialAltChimera = read1AltCheck
+        readContainingChimera = "read1"
 
     potentialChimera = None
     read1Check = checkForPotentialHostClip(read1, refLen, proviralSeqs = proviralSeqs,
@@ -483,19 +509,20 @@ def parseProviralReads(readPairs, proviralSeqs, hostClipFastaFn, clipMinLen = 17
   
     if read1Check is None and read2Check is not None:
       potentialChimera = read2Check
+      readContainingChimera = "read2"
     elif read1Check is not None and read2Check is None:
       potentialChimera = read1Check
+      readContainingChimera = "read1"
 
     if potentialAltChimera is not None and potentialChimera is not None:
       printRed("{}: please verify. Clip identified in both alt and normal align.".format(read1.qname))
     elif potentialAltChimera is not None:
       potentialValidChimeras[read1.qname] = potentialAltChimera
-      printBlue(read1.to_string())
-      printBlue(read2.to_string())
+      validReads[len(validReads) - 1].setPotentialClipEdit(readContainingChimera, potentialAltChimera, isAlt = True)
+
     elif potentialChimera is not None:
       potentialValidChimeras[read1.qname] = potentialChimera
-      printBlue(read1.to_string())
-      printBlue(read2.to_string())
+      validReads[len(validReads) - 1].setPotentialClipEdit(readContainingChimera, potentialChimera, isAlt = False)
 
   writeFasta(potentialValidChimeras, hostClipFastaFn)
 
@@ -575,6 +602,8 @@ def parseUnmappedReads(readPairs, proviralSeqs, proviralLTRSeqs, LTRClipMinLen =
         print("{}: Valid alternate soft clip detected in virus. Proceed further".format(viralRead.query_name))
         print(viralRead.to_string())
         potentialChimera.append(viralSoftClipAlt)
+
+        # TODO Finish setting this up...
 
     else:
       validUnmapped.append(readPair)
@@ -715,21 +744,18 @@ def main(args):
    clipMinLen = args.LTRClipLen)
   
   printGreen("Finding valid chimeras from proviral reads")
-  proviralValidChimeras = parseProviralReads(
+  proviralProcessedReads = parseProviralReads(
     readPairs = dualProviralAlignedReads,
     proviralSeqs = proviralSeqs,
     hostClipFastaFn = outputFNs["viralReadHostClipFasta"],
     clipMinLen = args.hostClipLen)
     
-  printCyanOnGrey("Found {} potential valid chimera(s)".format(len(proviralValidChimeras["potentialValidChimeras"].keys())))
+  printCyanOnGrey("Found {} potential valid chimera(s)".format(len(proviralProcessedReads["potentialValidChimeras"].keys())))
   printGreen("Aligning host clips found on viruses to host genome")
   validIntegrationSites = alignClipToHost(fafile=outputFNs["viralReadHostClipFasta"],
     hostGenomeIndex = args.hostGenomeIndex,
-    potentialChimeras = proviralValidChimeras["potentialValidChimeras"],
+    potentialChimeras = proviralProcessedReads["potentialValidChimeras"],
     hostClipLen = args.hostClipLen)
-  
-  for k in validIntegrationSites:
-    print(str(validIntegrationSites[k][0]))
   
   printGreen("Finding valid unmapped reads that might span between integration site")
   procUnmappedReads = parseUnmappedReads(unmappedPotentialChimera,
@@ -751,6 +777,16 @@ def main(args):
   # TODO parse hostValidChimeras - save integration site, CBC, viral pos and refname + coverage
   # TODO parse proviralValidChimeras - save CBC, viral pos and refname + coverage
   # TODO parse unmappedreads - save integration site, CBC, viral pos and refaname + coverage
+
+  printRed("hostValidChimeras")
+  pprint(hostValidChimeras)
+
+  printRed("proviralValidChimeras[validReads]")
+  pprint(proviralProcessedReads["validReads"])
+
+  printRed("validIntegrationSites from proviral valid chimeras")
+  for k in validIntegrationSites:
+    print(str(validIntegrationSites[k][0]))
 
 
 

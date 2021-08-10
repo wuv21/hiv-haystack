@@ -1,3 +1,5 @@
+from baseFunctions import extractCellBarcode
+
 class IntegrationSite(object):
   def __init__(self, chr, orient, pos):
     super().__init__()
@@ -11,17 +13,33 @@ class IntegrationSite(object):
 
 
 class ProviralFragment(object):
-  def __init__(self, seqname, startBp, endBp, cbc, usingAlt = None):
+  def __init__(self):
     super().__init__()
     
+    self.seqname = ""
+    self.startBp = 0 #0-based start pos
+    self.endBp = 0 #0-based end pos (endBp is the actual end Bp as opposed to position + 1)
+    self.cbc = ""
+    self.usingAlt = None
+
+  def __str__(self):
+    return "{} {}:{}-{}".format(self.cbc, self.seqname, self.startBp, self.endBp)
+
+  def setManually(self, seqname, startBp, endBp, cbc, usingAlt = None):
     self.seqname = seqname
     self.startBp = startBp #0-based start pos
     self.endBp = endBp #0-based end pos (endBp is the actual end Bp as opposed to position + 1)
     self.cbc = cbc
     self.usingAlt = usingAlt
 
-  def __str__(self):
-    return "{} {}:{}-{}".format(self.cbc, self.seqname, self.startBp, self.endBp)
+  def setFromRead(self, read):
+    self.seqname = read.reference_name
+    self.startBp = read.reference_start
+    self.endBp = read.reference_end - 1
+    self.cbc = extractCellBarcode(read)
+
+  def setAlt(self, usingAlt):
+    self.usingAlt = usingAlt
 
   
 class ChimericRead(object):
@@ -33,22 +51,23 @@ class ChimericRead(object):
     self.proviralFragment = proviralFragment
 
   def __str__(self):
-    return "{} is chimeric read with {}. Proviral fragment: {}".format(self.read.qname, str(self.intsite), str(self.proviralFragment))
-
-
-class ReadPairWithChimericRead(object):
-  def __init__(self, chimericRead, nonChimericRead):
-    super().__init__()
-    self.chimericRead = chimericRead
-    self.nonChimericRead = nonChimericRead
-
-  def isNonChimericReadProviral(self):
-    return type(self.nonChimericRead) is ProviralFragment 
+    return "{} is chimeric read with {}. Proviral fragment: {}".format(
+      self.read.query_name,
+      str(self.intsite),
+      str(self.proviralFragment))
 
 
 class ReadPairDualProviral(object):
-  def __init__(self, read1, read2):
+  def __init__(self, read1 : ProviralFragment, read2 : ProviralFragment):
     super().__init__()
     self.read1 = read1
     self.read2 = read2
+    self.potentialEditRead = ""
+    self.potentialEditData = None
+    self.potentialEditIsAlt = False
+
+  def setPotentialClipEdit(self, readNum, readData, isAlt):
+    self.potentialEditRead = readNum
+    self.potentialEditData = readData
+    self.potentialEditIsAlt = isAlt
 
