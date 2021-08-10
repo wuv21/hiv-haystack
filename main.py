@@ -463,11 +463,11 @@ def parseProviralReads(readPairs, proviralSeqs, hostClipFastaFn, clipMinLen = 17
     # add to allowed proviral reads...
     rd1ProviralFrag = ProviralFragment()
     rd1ProviralFrag.setFromRead(read1)
-    rd1ProviralFrag.setAlt(None if len(read1AllAlts) == 0 else read1AllAlts)
+    rd1ProviralFrag.setAlt(read1AllAlts)
 
     rd2ProviralFrag = ProviralFragment()
     rd2ProviralFrag.setFromRead(read2)
-    rd2ProviralFrag.setAlt(None if len(read2AllAlts) == 0 else read2AllAlts)
+    rd2ProviralFrag.setAlt(read2AllAlts)
 
     rdPair = ReadPairDualProviral(read1 = rd1ProviralFrag, read2 = rd2ProviralFrag)
     validReads.append(rdPair)
@@ -801,9 +801,9 @@ def main(args):
   #   cellrangerBam,
   #   hostValidChimeras["validReads"])
 
-  writeBam(outputFNs["validProviralReads"],
-    cellrangerBam,
-    proviralValidChimeras["validReads"])
+  # writeBam(outputFNs["validProviralReads"],
+  #   cellrangerBam,
+  #   proviralProcessedReads["validReads"])
 
   # writeBam(outputFNs["validProviralReadsWithPotentialChimera"],
   #   cellrangerBam,

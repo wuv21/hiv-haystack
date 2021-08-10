@@ -1,4 +1,4 @@
-from baseFunctions import extractCellBarcode
+from scripts.baseFunctions import extractCellBarcode
 
 class IntegrationSite(object):
   def __init__(self, chr, orient, pos):
@@ -39,7 +39,12 @@ class ProviralFragment(object):
     self.cbc = extractCellBarcode(read)
 
   def setAlt(self, usingAlt):
-    self.usingAlt = usingAlt
+    if usingAlt is None:
+      self.usingAlt = None
+    elif type(usingAlt) == list and len(usingAlt) == 0:
+      self.usingAlt = None
+    else:
+      self.usingAlt = usingAlt
 
   
 class ChimericRead(object):
