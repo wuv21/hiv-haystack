@@ -34,7 +34,7 @@ def importProcessedBam(bamfile, returnDict = True):
   return val
 
 
-def writeFasta(chimeras, hostClipFastaFn):
+def writeFasta(chimeras, fastafn):
   records = []
   for qnameKey in chimeras:
     chimera = chimeras[qnameKey]
@@ -51,4 +51,5 @@ def writeFasta(chimeras, hostClipFastaFn):
 
     records.append(record)
 
-  SeqIO.write(records, hostClipFastaFn, "fasta")
+  if len(records) != 0:
+    SeqIO.write(records, fastafn, "fasta")

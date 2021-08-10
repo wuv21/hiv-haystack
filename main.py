@@ -530,8 +530,10 @@ def parseProviralReads(readPairs, proviralSeqs, hostClipFastaFn, clipMinLen = 17
   return returnVal
 
 
-def parseUnmappedReads(readPairs, proviralSeqs, proviralLTRSeqs, LTRClipMinLen = 11, hostClipMinLen = 17, minHostQuality = 30):
-  validUnmapped = []
+def parseUnmappedReads(readPairs, proviralSeqs, proviralLTRSeqs, unmappedHostClipFn,
+  LTRClipMinLen = 11, hostClipMinLen = 17, minHostQuality = 30):
+
+  viralFrags = []
   validChimera = []
   potentialChimera = []
 
@@ -551,16 +553,20 @@ def parseUnmappedReads(readPairs, proviralSeqs, proviralLTRSeqs, LTRClipMinLen =
     
     hostReadSubs = hostRead.cigarstring.count("S")
     viralReadSubs = viralRead.cigarstring.count("S")
+
+    proviralFrag = ProviralFragment()
+    proviralFrag.setFromRead(viralRead)
+    proviralFrag.usingAlt(getAltAlign(viralRead))
     
     # can't have mulutiple soft clips present
     if hostReadSubs + viralReadSubs > 1:
       #print("{}: Multiple soft clips in either/both reads, but still valid".format(hostRead.query_name))
-      validUnmapped.append(readPair)
+      viralFrags.append(proviralFrag)
       continue
 
-    # if no soft clips, just save as valid unmapped
+    # if no soft clips, just save viral read
     if hostReadSubs == 0 and viralReadSubs == 0:
-      validUnmapped.append(readPair)
+      viralFrags.append(proviralFrag)
       continue
 
     # special case. #TODO add this case.
@@ -569,15 +575,12 @@ def parseUnmappedReads(readPairs, proviralSeqs, proviralLTRSeqs, LTRClipMinLen =
 
     # host read soft clip
     elif hostReadSubs == 1:
-      tmp = getSoftClip(hostRead, LTRClipMinLen, 3)
-      if tmp is not None:
-        print(tmp)
-      
       potentialHits = isSoftClipProviral(hostRead, proviralLTRSeqs, proviralSeqs, LTRClipMinLen)
       if potentialHits:
-        validChimera.append({"readPair": readPair, "chimericRead": potentialHits})
+        validChimera.append(potentialHits)
+        viralFrags.append(proviralFrag)
       else:
-        validUnmapped.append(readPair)
+        viralFrags.append(proviralFrag)
 
     # viral read soft clip
     elif viralReadSubs == 1:
@@ -601,16 +604,19 @@ def parseUnmappedReads(readPairs, proviralSeqs, proviralLTRSeqs, LTRClipMinLen =
       elif viralSoftClipAlt is not None:
         print("{}: Valid alternate soft clip detected in virus. Proceed further".format(viralRead.query_name))
         print(viralRead.to_string())
+        proviralFrag.setPotentialClipEdit(viralRead.query_name, potentialChimera, isAlt = False)
         potentialChimera.append(viralSoftClipAlt)
 
         # TODO Finish setting this up...
 
     else:
-      validUnmapped.append(readPair)
+      viralFrags.append(proviralFrag)
+
+  writeFasta(potentialChimera, unmappedHostClipFn)
 
   return {
     "validChimera": validChimera,
-    "validUnmapped": validUnmapped,
+    "viralFrags": viralFrags,
     "potentialChimera": potentialChimera}
 
 
@@ -670,7 +676,8 @@ def main(args):
     "hostWithValidChimera": "hostWithValidChimera.bam",
     "validProviralReads": "validProviralReads.bam",
     "validProviralReadsWithPotentialChimera": "validProviralReadsWithPotentialChimera.bam",
-    "viralReadHostClipFasta": "viralReadHostClipFastaFn.fa"
+    "viralReadHostClipFasta": "viralReadHostClipFasta.fa",
+    "unmappedHostClipFasta": "unmappedHostClipFasta.fa"
   }
 
   for k in outputFNs:
@@ -751,6 +758,7 @@ def main(args):
     clipMinLen = args.hostClipLen)
     
   printCyanOnGrey("Found {} potential valid chimera(s)".format(len(proviralProcessedReads["potentialValidChimeras"].keys())))
+
   printGreen("Aligning host clips found on viruses to host genome")
   validIntegrationSites = alignClipToHost(fafile=outputFNs["viralReadHostClipFasta"],
     hostGenomeIndex = args.hostGenomeIndex,
@@ -761,14 +769,18 @@ def main(args):
   procUnmappedReads = parseUnmappedReads(unmappedPotentialChimera,
     proviralSeqs,
     potentialLTR,
+    unmappedHostClipFn = outputFNs["unmappedHostClipFasta"],
     LTRClipMinLen = args.LTRClipLen,
     hostClipMinLen = args.hostClipLen)
-
-  # TODO check potentialChimera (viral with potential host clip)
    
   printCyanOnGrey("Found {} valid unmapped + {} with a potentially valid integration site".format(
     len(procUnmappedReads["validUnmapped"]),
     len(procUnmappedReads["validChimera"])))
+
+  unmappedValidIntegrationSites = alignClipToHost(fafile = outputFNs["unmappedHostClipFasta"],
+    hostGenomeIndex = args.hostGenomeIndex,
+    potentialChimeras = procUnmappedReads["validChimera"],
+    hostClipLen = args.hostClipLen)
 
   #############################
   # Compile reads
@@ -791,6 +803,13 @@ def main(args):
   for k in validIntegrationSites:
     print(str(validIntegrationSites[k][0]))
 
+  printRed("procUnmappedReads from viral unmapped")
+  for k in procUnmappedReads["validUnmapped"]:
+    print(str(k))
+
+  printRed("unamppedValidIntegrationSites")
+  for k in unmappedValidIntegrationSites:
+    print(str(unmappedValidIntegrationSites[k][0]))
 
 
   #############################

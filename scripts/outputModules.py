@@ -56,7 +56,7 @@ class ChimericRead(object):
     self.proviralFragment = proviralFragment
 
   def __str__(self):
-    return "{} is chimeric read with {}. Proviral fragment: {}".format(
+    return "{} is chimeric with {}. Proviral fragment: {}".format(
       self.read.query_name,
       str(self.intsite),
       str(self.proviralFragment))
