@@ -1,7 +1,6 @@
 import pysam
 from Bio import SeqIO
 from Bio.Seq import Seq
-from Bio.SeqRecord import SeqRecord
 from collections import defaultdict
 import argparse
 import os
@@ -11,6 +10,7 @@ import subprocess
 from pprint import pprint
 from termcolor import cprint
 from scripts.outputModules import *
+from scripts.baseFunctions import *
 
 printRed = lambda x: cprint(x, "red")
 printGreen = lambda x: cprint(x, "green")
@@ -27,28 +27,9 @@ def getProviralFastaIDs(fafile, recordSeqs):
 
   return ids
 
-
-def extractCellBarcode(read):
-  # accept only CB tag because it passes the allowlist set by 10X
-  tags = dict(read.tags)
-  if "CB" in tags:
-      barcode = tags["CB"]
-  else:
-      barcode = None
-
-  return barcode
-
-
 def getLTRseq(seq, start, end):
   ltrSeq = seq[start - 1:end]
   return ltrSeq
-
-
-def separateCigarString(cigarstring):
-  cigarSep = re.findall(r"(\d+\w)", cigarstring)
-  cigarSepExpanded = [re.split(r"(\d+)", x)[1:3] for x in cigarSep]
-
-  return cigarSepExpanded
 
 
 def parseLTRMatches(LTRargs, proviralSeqs, position = False, endBuffer = 20):
@@ -265,6 +246,7 @@ def isSoftClipProviral(read, proviralLTRSeqs, proviralSeqs, clipMinLen = 11, sof
         seqname = key,
         startBp = proviralStartPos,
         endBp = proviralEndPos,
+        cbc = extractCellBarcode(read),
         usingAlt = None
       )
 
@@ -383,26 +365,6 @@ def checkForPotentialHostClip(read, refLen, proviralSeqs, clipMinLen = 17, useAl
       return returnObj
 
   return None
-
-
-def writeFasta(chimeras, hostClipFastaFn):
-  records = []
-  for qnameKey in chimeras:
-    chimera = chimeras[qnameKey]
-    if chimera["adjustedHostSoftClip"] is not None:
-      seq = Seq(chimera["adjustedHostSoftClip"])
-    else:
-      seq = Seq(chimera["hostSoftClip"]["clippedFrag"])
-    
-    record = SeqRecord(
-      id = chimera["read"].qname,
-      seq = seq,
-      description = ""
-    )
-
-    records.append(record)
-
-  SeqIO.write(records, hostClipFastaFn, "fasta")
 
 
 def alignClipToHost(fafile, hostGenomeIndex, potentialChimeras, hostClipLen = 17):
@@ -672,35 +634,6 @@ def parseCellrangerBam(bamfile, proviralFastaIds, proviralReads, hostReadsWithPo
       return
     
   return bam
-
-
-def writeBam(fn, templateBam, reads):
-  outputBam = pysam.AlignmentFile(fn, "wb", template = templateBam)
-  
-  if isinstance(reads, list):
-    for read in reads:
-      outputBam.write(read)
-  else:
-    for qname in reads:
-      for read in reads[qname]:
-        outputBam.write(read)
-
-
-def importProcessedBam(bamfile, returnDict = True):
-  bam = pysam.AlignmentFile(bamfile, "rb", threads = 20)
-
-  if returnDict:
-    val = defaultdict(list)
-  else:
-    val = []
-
-  for read in bam:
-    if returnDict:
-      val[read.query_name].append(read)
-    else:
-      val.append(read)
-
-  return val
 
 
 def main(args):

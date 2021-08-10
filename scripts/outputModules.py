@@ -11,16 +11,17 @@ class IntegrationSite(object):
 
 
 class ProviralFragment(object):
-  def __init__(self, seqname, startBp, endBp, usingAlt = None):
+  def __init__(self, seqname, startBp, endBp, cbc, usingAlt = None):
     super().__init__()
     
     self.seqname = seqname
-    self.startBp = startBp
-    self.endBp = endBp
+    self.startBp = startBp #0-based start pos
+    self.endBp = endBp #0-based end pos (endBp is the actual end Bp as opposed to position + 1)
+    self.cbc = cbc
     self.usingAlt = usingAlt
 
   def __str__(self):
-    return "{}:{}-{}".format(self.seqname, self.startBp, self.endBp)
+    return "{} {}:{}-{}".format(self.cbc, self.seqname, self.startBp, self.endBp)
 
   
 class ChimericRead(object):
@@ -36,20 +37,18 @@ class ChimericRead(object):
 
 
 class ReadPairWithChimericRead(object):
-  def __init__(self, chimericRead, nonChimericRead, cbc):
+  def __init__(self, chimericRead, nonChimericRead):
     super().__init__()
     self.chimericRead = chimericRead
     self.nonChimericRead = nonChimericRead
-    self.cbc = cbc
 
   def isNonChimericReadProviral(self):
     return type(self.nonChimericRead) is ProviralFragment 
 
 
 class ReadPairDualProviral(object):
-  def __init__(self, read1, read2, cbc):
+  def __init__(self, read1, read2):
     super().__init__()
     self.read1 = read1
     self.read2 = read2
-    self.cbc = cbc
 
