@@ -4,6 +4,7 @@ from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 
+
 def writeBam(fn, templateBam, reads):
   outputBam = pysam.AlignmentFile(fn, "wb", template = templateBam)
   
@@ -32,6 +33,7 @@ def importProcessedBam(bamfile, returnDict = True):
 
   return val
 
+
 def writeFasta(chimeras, hostClipFastaFn):
   records = []
   for qnameKey in chimeras:
@@ -40,7 +42,7 @@ def writeFasta(chimeras, hostClipFastaFn):
       seq = Seq(chimera["adjustedHostSoftClip"])
     else:
       seq = Seq(chimera["hostSoftClip"]["clippedFrag"])
-
+    
     record = SeqRecord(
       id = chimera["read"].qname,
       seq = seq,

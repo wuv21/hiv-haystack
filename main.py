@@ -11,6 +11,7 @@ from pprint import pprint
 from termcolor import cprint
 from scripts.outputModules import *
 from scripts.baseFunctions import *
+from scripts.io import *
 
 printRed = lambda x: cprint(x, "red")
 printGreen = lambda x: cprint(x, "green")
