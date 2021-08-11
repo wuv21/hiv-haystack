@@ -129,8 +129,8 @@ class CompiledDataset(object):
     super().__init__()
     self.integrationSites = []
     self.pairedViralFrags = []
-    self.singleViralFrags = []
-    # self.collatedViralFrags = []
+    # self.singleViralFrags = []
+    self.collatedViralFrags = []
 
     for c in validChimerasFromHostReads:
       self.integrationSites.append(c)
