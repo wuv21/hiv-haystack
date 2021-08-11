@@ -132,11 +132,11 @@ class CompiledDataset(object):
     # self.singleViralFrags = []
     self.collatedViralFrags = []
 
-    for c in validChimerasFromHostReads:
+    for c in validChimerasFromViralReads:
       self.integrationSites.append(c)
       self.collatedViralFrags.append(c.proviralFragment)
 
-    for x in validChimerasFromViralReads:
+    for x in validChimerasFromHostReads:
       if len(x['minus']) != 0:
         self.integrationSites = self.integrationSites + x['minus']
         # self.collatedViralFrags.append(c.proviralFragment) # this should already be added in the validViralReads
