@@ -14,7 +14,7 @@ While hiv-haystack is built upon epiVIA, the main differences between hiv-haysta
 - Allows for BAM files that were aligned to more than one provirus reference genome, which is useful for samples derived from persons living with HIV (espeically with antiretroviral treatment). This is due to the high mutational rate which misses out on viral reads if using just the default HXB2 HIV reference genome in combination with cellranger-atac's bwa mem aligner.
 - Has more stringent checking of host reads with potential viral chimeras to reduce chances of false positives.
   - In the case of a potential viral soft clip not mapping continously to the end of LTR (either 5' or 3' in either direction), hiv-haystack will check the adjacent host base pairs to see if those reads could align to both virus and host. If there is no alignment to virus, this read is discarded and not considered a read with a valid chimera since the viral sequence did not extent to the end of the LTR as would be needed for a correct HIV-host genome junction site.
-  - Increased stringency checking to ensure orientation is correct in regards to soft clip location.
+
 
 ## Getting started
 More to come about this...
