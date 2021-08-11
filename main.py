@@ -281,20 +281,6 @@ def parseHostReadsWithPotentialChimera(readPairs, proviralLTRSeqs, proviralSeqs,
   return validChimeras
 
 
-def getAltAlign(read):
-  if not read.has_tag("XA"):
-    return None
-
-  altAlignRaw = read.get_tag("XA")
-  
-  # remove last semicolon
-  altAlignRaw = altAlignRaw[:-1]
-  altAligns = altAlignRaw.split(";")
-  altAligns = [x.split(",") for x in altAligns]
-
-  return altAligns
-
-
 def checkForPotentialHostClip(read, refLen, proviralSeqs, clipMinLen = 17, useAlts = None, softClipPad = 3):
   readInfo = {
     "start": read.reference_start,
@@ -365,7 +351,7 @@ def checkForPotentialHostClip(read, refLen, proviralSeqs, clipMinLen = 17, useAl
   return None
 
 
-def alignClipToHost(fafile, hostGenomeIndex, potentialChimeras, hostClipLen = 17):
+def alignClipToHost(fafile, hostGenomeIndex, potentialChimeras, hostClipLen = 17, nonChimeras = None):
   if not os.path.exists(fafile) or os.stat(fafile).st_size == 0:
     printGreen("No records in fasta file. Skipping alignment.") 
     return None
@@ -388,17 +374,22 @@ def alignClipToHost(fafile, hostGenomeIndex, potentialChimeras, hostClipLen = 17
   alignment = pysam.AlignmentFile(outputSam, "r")
   for rec in alignment:
     if rec.mapq == 0:
+      if nonChimeras is not None:
+        nonChimeras[rec.qname].unsetPotentialClipEdit()
+
       continue
 
     if len(validIntSites[rec.qname]) > 0:
       printRed("{}: integration site can't be found due to multiple hits in host genome".format(rec.qname))
       validIntSites.pop(rec.qname)
       qnamesWithMultipleHits.append[rec.qname]
+
+      if nonChimeras is not None:
+        nonChimeras[rec.qname].unsetPotentialClipEdit()
       continue
     elif rec.qname in qnamesWithMultipleHits:
       continue
     
-
     # check orientation of alignment
     currentChimera = potentialChimeras[rec.qname]
     if currentChimera["adjustment"] != 0:
@@ -412,6 +403,8 @@ def alignClipToHost(fafile, hostGenomeIndex, potentialChimeras, hostClipLen = 17
       else:
         orient = "+"
 
+    # TODO edit dualproviralobject if 1) edit is used, just change read and 2) if alt is used, change both
+
     intsite = IntegrationSite(rec.reference_name, orient, rec.reference_start)
     proviralFrag = ProviralFragment()
     proviralFrag.setManually(
@@ -420,6 +413,11 @@ def alignClipToHost(fafile, hostGenomeIndex, potentialChimeras, hostClipLen = 17
       endBp = currentChimera["read"].reference_end - 1,
       cbc = extractCellBarcode(currentChimera["read"])
     )
+
+    if nonChimeras is not None:
+      nonChimeras[rec.qname].updateWithConfirmedEdit(proviralFrag)
+
+    
     chimera = ChimericRead(
       read = currentChimera["read"],
       intsite = intsite,
@@ -432,7 +430,7 @@ def alignClipToHost(fafile, hostGenomeIndex, potentialChimeras, hostClipLen = 17
 
 
 def parseProviralReads(readPairs, proviralSeqs, hostClipFastaFn, clipMinLen = 17):
-  validReads = []
+  validReads = defaultdict()
   potentialValidChimeras = defaultdict()
 
   for rpName in readPairs:
@@ -470,7 +468,7 @@ def parseProviralReads(readPairs, proviralSeqs, hostClipFastaFn, clipMinLen = 17
     rd2ProviralFrag.setAlt(read2AllAlts)
 
     rdPair = ReadPairDualProviral(read1 = rd1ProviralFrag, read2 = rd2ProviralFrag)
-    validReads.append(rdPair)
+    validReads[read1.qname] = rdPair
 
     # skip if there's multiple soft clips
     if read1.cigarstring.count("S") + read2.cigarstring.count("S") > 1:
@@ -518,11 +516,11 @@ def parseProviralReads(readPairs, proviralSeqs, hostClipFastaFn, clipMinLen = 17
       printRed("{}: please verify. Clip identified in both alt and normal align.".format(read1.qname))
     elif potentialAltChimera is not None:
       potentialValidChimeras[read1.qname] = potentialAltChimera
-      validReads[len(validReads) - 1].setPotentialClipEdit(readContainingChimera, potentialAltChimera, isAlt = True)
+      validReads[read1.qname].setPotentialClipEdit(readContainingChimera, potentialAltChimera, isAlt = True)
 
     elif potentialChimera is not None:
       potentialValidChimeras[read1.qname] = potentialChimera
-      validReads[len(validReads) - 1].setPotentialClipEdit(readContainingChimera, potentialChimera, isAlt = False)
+      validReads[read1.qname].setPotentialClipEdit(readContainingChimera, potentialChimera, isAlt = False)
 
   writeFasta(potentialValidChimeras, hostClipFastaFn)
 
@@ -607,8 +605,6 @@ def parseUnmappedReads(readPairs, proviralSeqs, proviralLTRSeqs, unmappedHostCli
         proviralFrag.setPotentialClipEdit(viralRead.query_name, potentialChimera, isAlt = False)
         potentialChimera.append(viralSoftClipAlt)
 
-        # TODO Finish setting this up...
-
     else:
       viralFrags.append(proviralFrag)
 
@@ -677,7 +673,9 @@ def main(args):
     "validProviralReads": "validProviralReads.bam",
     "validProviralReadsWithPotentialChimera": "validProviralReadsWithPotentialChimera.bam",
     "viralReadHostClipFasta": "viralReadHostClipFasta.fa",
-    "unmappedHostClipFasta": "unmappedHostClipFasta.fa"
+    "unmappedHostClipFasta": "unmappedHostClipFasta.fa",
+    "integrationSites": "integrationSites.tsv",
+    "viralFrags": "viralFrags.tsv"
   }
 
   for k in outputFNs:
@@ -745,7 +743,7 @@ def main(args):
 
   # parse host reads with potential chimera
   printGreen("Finding valid chimeras from host reads")
-  hostValidChimeras = parseHostReadsWithPotentialChimera(hostReadsWithPotentialChimera,
+  validChimerasFromHostReads = parseHostReadsWithPotentialChimera(hostReadsWithPotentialChimera,
    potentialLTR,
    proviralSeqs = proviralSeqs,
    clipMinLen = args.LTRClipLen)
@@ -760,7 +758,7 @@ def main(args):
   printCyanOnGrey("Found {} potential valid chimera(s)".format(len(proviralProcessedReads["potentialValidChimeras"].keys())))
 
   printGreen("Aligning host clips found on viruses to host genome")
-  validIntegrationSites = alignClipToHost(fafile=outputFNs["viralReadHostClipFasta"],
+  validChimerasFromViralReads = alignClipToHost(fafile=outputFNs["viralReadHostClipFasta"],
     hostGenomeIndex = args.hostGenomeIndex,
     potentialChimeras = proviralProcessedReads["potentialValidChimeras"],
     hostClipLen = args.hostClipLen)
@@ -777,7 +775,7 @@ def main(args):
     len(procUnmappedReads["viralFrags"]),
     len(procUnmappedReads["validChimera"])))
 
-  unmappedValidIntegrationSites = alignClipToHost(fafile = outputFNs["unmappedHostClipFasta"],
+  validChimerasFromUnmappedReads = alignClipToHost(fafile = outputFNs["unmappedHostClipFasta"],
     hostGenomeIndex = args.hostGenomeIndex,
     potentialChimeras = procUnmappedReads["validChimera"],
     hostClipLen = args.hostClipLen)
@@ -785,32 +783,37 @@ def main(args):
   #############################
   # Compile reads
   #############################
-  # TODO parse validIntegrationSites - save integration site, CBC, viral pos and refname + coverage
-  # TODO parse hostValidChimeras - save integration site, CBC, viral pos and refname + coverage
-  # TODO parse proviralValidChimeras - save CBC, viral pos and refname + coverage
-  # TODO parse unmappedreads - save integration site, CBC, viral pos and refaname + coverage
 
-  printRed("hostValidChimeras")
-  for v in hostValidChimeras:
-    printBlue(str(v['minus'][0]) if len(v['minus']) != 0 else str(v['plus'][0]))
+  printGreen("Compiling dataset")
+  compiled = CompiledDataset(
+    validChimerasFromHostReads=validChimerasFromHostReads,
+    validChimerasFromViralReads=validChimerasFromViralReads,
+    validChimerasFromUnmappedReads=validChimerasFromUnmappedReads,
+    validViralReads=proviralProcessedReads["validReads"],
+    unmappedViralReads=procUnmappedReads["viralFrags"]
+  )
 
-  printRed("proviralValidChimeras[validReads]")
-  for p in proviralProcessedReads["validReads"][0:10]:
-    printBlue(str(p.read1))
-    printBlue(str(p.read2))
+  # printRed("validChimerasFromHostReads")
+  # for v in validChimerasFromHostReads:
+  #   printBlue(str(v['minus'][0]) if len(v['minus']) != 0 else str(v['plus'][0]))
 
-  printRed("validIntegrationSites from proviral valid chimeras")
-  for k in validIntegrationSites:
-    print(str(validIntegrationSites[k][0]))
+  # printRed("proviralValidChimeras[validReads]")
+  # for p in proviralProcessedReads["validReads"][0:10]:
+  #   printBlue(str(p.read1))
+  #   printBlue(str(p.read2))
 
-  printRed("procUnmappedReads from viral unmapped")
-  for k in procUnmappedReads["viralFrags"]:
-    print(str(k))
+  # printRed("validIntegrationSites from proviral valid chimeras")
+  # for k in validChimerasFromViralReads:
+  #   print(str(validChimerasFromViralReads[k][0]))
 
-  printRed("unamppedValidIntegrationSites")
-  if unmappedValidIntegrationSites is not None:
-    for k in unmappedValidIntegrationSites:
-      print(str(unmappedValidIntegrationSites[k][0]))
+  # printRed("procUnmappedReads from viral unmapped")
+  # for k in procUnmappedReads["viralFrags"]:
+  #   print(str(k))
+
+  # printRed("unamppedValidIntegrationSites")
+  # if validChimerasFromUnmappedReads is not None:
+  #   for k in validChimerasFromUnmappedReads:
+  #     print(str(validChimerasFromUnmappedReads[k][0]))
 
 
   #############################
@@ -818,8 +821,11 @@ def main(args):
   #############################
 
   # write out processed files
-  printGreen("Writing out processed bam files")
-  cellrangerBam = pysam.AlignmentFile(args.bamfile, "rb")
+  printGreen("Writing out compiled dataset")
+  compiled.exportIntegrationSiteTSV(outputFNs["integrationSites"])
+  compiled.exportProviralCoverageTSV(outputFNs["viralFrags"])
+  
+  # cellrangerBam = pysam.AlignmentFile(args.bamfile, "rb")
   # writeBam(args.outputDir + "/" + outputFNs["hostWithValidChimera"],
   #   cellrangerBam,
   #   hostValidChimeras["validReads"])
@@ -831,7 +837,7 @@ def main(args):
   # writeBam(outputFNs["validProviralReadsWithPotentialChimera"],
   #   cellrangerBam,
   #   [x["read"] for x in proviralValidChimeras["potentialValidChimeras"]])
-  cellrangerBam.close()
+  # cellrangerBam.close()
 
 
 if __name__ == '__main__':

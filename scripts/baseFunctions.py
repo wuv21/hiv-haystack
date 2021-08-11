@@ -15,3 +15,16 @@ def extractCellBarcode(read):
       barcode = None
 
   return barcode
+
+def getAltAlign(read):
+  if not read.has_tag("XA"):
+    return None
+
+  altAlignRaw = read.get_tag("XA")
+  
+  # remove last semicolon
+  altAlignRaw = altAlignRaw[:-1]
+  altAligns = altAlignRaw.split(";")
+  altAligns = [x.split(",") for x in altAligns]
+
+  return altAligns
