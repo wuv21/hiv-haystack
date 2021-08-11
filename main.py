@@ -788,7 +788,8 @@ def main(args):
   compiled = CompiledDataset(
     validChimerasFromHostReads=validChimerasFromHostReads,
     validChimerasFromViralReads=validChimerasFromViralReads,
-    validChimerasFromUnmappedReads=validChimerasFromUnmappedReads,
+    validChimerasFromUnmappedReadsHost=procUnmappedReads["validChimera"],
+    validChimerasFromUnmappedReadsViral=validChimerasFromUnmappedReads,
     validViralReads=proviralProcessedReads["validReads"],
     unmappedViralReads=procUnmappedReads["viralFrags"]
   )
@@ -824,7 +825,7 @@ def main(args):
   printGreen("Writing out compiled dataset")
   compiled.exportIntegrationSiteTSV(outputFNs["integrationSites"])
   compiled.exportProviralCoverageTSV(outputFNs["viralFrags"])
-  
+
   # cellrangerBam = pysam.AlignmentFile(args.bamfile, "rb")
   # writeBam(args.outputDir + "/" + outputFNs["hostWithValidChimera"],
   #   cellrangerBam,

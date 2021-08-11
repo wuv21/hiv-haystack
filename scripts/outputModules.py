@@ -120,7 +120,8 @@ class CompiledDataset(object):
   def __init__(self,
     validChimerasFromHostReads,
     validChimerasFromViralReads,
-    validChimerasFromUnmappedReads,
+    validChimerasFromUnmappedReadsHost,
+    validChimerasFromUnmappedReadsViral,
     validViralReads,
     unmappedViralReads):
 
@@ -145,10 +146,14 @@ class CompiledDataset(object):
 
       elif len(x['plus']) != 0:
         self.integrationSites = self.integrationSites + x['plus']
+
+    for x in validChimerasFromUnmappedReadsHost:
+      self.integrationSites.append(c)
+      self.collatedViralFrags.append(c.proviralFragment.returnAsList())
     
-    if validChimerasFromUnmappedReads is not None:
-      for key in validChimerasFromUnmappedReads:
-        alignedSites = validChimerasFromUnmappedReads[key]
+    if validChimerasFromUnmappedReadsViral is not None:
+      for key in validChimerasFromUnmappedReadsViral:
+        alignedSites = validChimerasFromUnmappedReadsViral[key]
         for i in alignedSites:
           self.integrationSites.append(i)
 
