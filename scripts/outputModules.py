@@ -148,8 +148,15 @@ class CompiledDataset(object):
         self.integrationSites = self.integrationSites + x['plus']
 
     for x in validChimerasFromUnmappedReadsHost:
-      self.integrationSites.append(x)
-      self.collatedViralFrags.append(x.proviralFragment.returnAsList())
+      if len(x['minus']) != 0:
+        self.integrationSites = self.integrationSites + x['minus']
+        
+        self.collatedViralFrags.append(x[0].proviralFragment.returnAsList())
+
+      elif len(x['plus']) != 0:
+        self.integrationSites = self.integrationSites + x['plus']
+
+        self.collatedViralFrags.append(x[0].proviralFragment.returnAsList())
     
     if validChimerasFromUnmappedReadsViral is not None:
       for key in validChimerasFromUnmappedReadsViral:
