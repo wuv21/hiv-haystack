@@ -113,9 +113,7 @@ class ReadPairDualProviral(object):
     read1List = self.read1.returnAsList()
     read2List = self.read2.returnAsList()
 
-    if self.potentialEditIsAlt and self.potentialEditRead == "read1":
-      read1List.append([self.potentialEditIsAlt, True])
-      read2List.append([self.potentialEditIsAlt, False])
+    return [read1List, read2List]
 
 
 class CompiledDataset(object):
@@ -138,7 +136,7 @@ class CompiledDataset(object):
         
         for c in keypair:
           self.integrationSites.append(c)
-          self.collatedViralFrags.append(c.proviralFragment)
+          self.collatedViralFrags.append(c.proviralFragment.returnAsList())
 
     for x in validChimerasFromHostReads:
       if len(x['minus']) != 0:
@@ -159,27 +157,29 @@ class CompiledDataset(object):
       readPair = validViralReads[v]
       self.pairedViralFrags.append(readPair)
       
-      read1 = readPair.read1.returnAsList()
-      read2 = readPair.read2.returnAsList()
-
-      self.collatedViralFrags.append(read1)
-      self.collatedViralFrags.append(read2)
+      readPairList = readPair.returnAsList()
+      self.collatedViralFrags.append(readPairList[0])
+      self.collatedViralFrags.append(readPairList[1])
 
     # parse through unampped viral reads
     for v in unmappedViralReads:
-      self.collatedViralFrags.append(v)
+      self.collatedViralFrags.append(v.returnAsList())
 
 
   def exportIntegrationSiteTSV(self, fn):
     output = [[x.proviralFragment.cbc] + x.intsite.returnAsList() for x in self.integrationSites]
 
     with open(fn, "w") as tsvfile:
-      writ = writer(tsvfile, delimiter = "\t", newline = "\n")
+      writ = writer(tsvfile, delimiter = "\t")
+
+      writ.writerow(["cbc", "chr", "orient", "pos"])
       for o in output:
         writ.writerow(o)
 
   def exportProviralCoverageTSV(self, fn):
     with open(fn, "w") as tsvfile:
-      writ = writer(tsvfile, delimiter = "\t", newline = "\n")
+      writ = writer(tsvfile, delimiter = "\t")
+
+      writ.writerow(["cbc", "seqname", "startBp", "endBp", "usingAlt", "confirmedAlt"])
       for o in self.collatedViralFrags:
         writ.writerow(o)
