@@ -171,7 +171,7 @@ class CompiledDataset(object):
 
 
   def exportIntegrationSiteTSV(self, fn):
-    output = [[x.proviralFragment.cbc] + x.intsite.returnAsList() for x in self.integrationSite]
+    output = [[x.proviralFragment.cbc] + x.intsite.returnAsList() for x in self.integrationSites]
 
     with open(fn, "w") as tsvfile:
       writ = writer(tsvfile, delimiter = "\t", newline = "\n")
