@@ -156,10 +156,11 @@ class CompiledDataset(object):
 
     # parse through paired viral reads
     for v in validViralReads:
-      self.pairedViralFrags.append(v)
+      readPair = validViralReads[v]
+      self.pairedViralFrags.append(readPair)
       
-      read1 = v.read1.returnAsList()
-      read2 = v.read2.returnAsList()
+      read1 = readPair.read1.returnAsList()
+      read2 = readPair.read2.returnAsList()
 
       self.collatedViralFrags.append(read1)
       self.collatedViralFrags.append(read2)
