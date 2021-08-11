@@ -132,12 +132,13 @@ class CompiledDataset(object):
     # self.singleViralFrags = []
     self.collatedViralFrags = []
 
-    for k in validChimerasFromViralReads:
-      keypair = validChimerasFromViralReads[k]
-      
-      for c in keypair:
-        self.integrationSites.append(c)
-        self.collatedViralFrags.append(c.proviralFragment)
+    if validChimerasFromViralReads is not None:
+      for k in validChimerasFromViralReads:
+        keypair = validChimerasFromViralReads[k]
+        
+        for c in keypair:
+          self.integrationSites.append(c)
+          self.collatedViralFrags.append(c.proviralFragment)
 
     for x in validChimerasFromHostReads:
       if len(x['minus']) != 0:
@@ -147,10 +148,11 @@ class CompiledDataset(object):
       elif len(x['plus']) != 0:
         self.integrationSites = self.integrationSites + x['plus']
     
-    for key in validChimerasFromUnmappedReads:
-      alignedSites = validChimerasFromUnmappedReads[key]
-      for i in alignedSites:
-        self.integrationSites.append(i)
+    if validChimerasFromUnmappedReads is not None:
+      for key in validChimerasFromUnmappedReads:
+        alignedSites = validChimerasFromUnmappedReads[key]
+        for i in alignedSites:
+          self.integrationSites.append(i)
 
     # parse through paired viral reads
     for v in validViralReads:
