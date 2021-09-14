@@ -206,11 +206,23 @@ def isSoftClipProviral(read, proviralLTRSeqs, proviralSeqs, clipMinLen = 11, sof
       # find orientation
       orient = "plus" if ltrType == "5p" or ltrType == "3p" else "minus"
 
-      matches = [x.start() for x in re.finditer(strClippedFrag, str(s))]
+      # adjust this as needed based on read length...
+      interestLen = 50
+      strS = str(s)
+      if (ltrType == "5p" or ltrType == "3pRevComp"):
+        sInterest = strS[0:interestLen]
+      elif (ltrType == "3p" or ltrType == "5pRevComp"):
+        sInterest = strS[-interestLen:]
+
+      matches = [x.start() for x in re.finditer(strClippedFrag, sInterest)]
       if len(matches) == 0:
         continue
 
       ltrLen = len(str(s))
+      # add to matches to get compatibility with original code
+      if (ltrType == "3p" or ltrType == "5pRevComp"):
+        matches = [x + (ltrLen - interestLen) for x in matches]
+
       # check if match is within soft buffer zone
       if (ltrType == "5p" or ltrType == "3pRevComp") and min(matches) > softClipPad:
         continue
