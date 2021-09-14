@@ -77,15 +77,27 @@ def parseLTRMatches(LTRargs, proviralSeqs, position = False, endBuffer = 20):
         if abs(send - sstart) < 550:
           continue
         elif sstart < endBuffer:
-          seq = getLTRseq(proviralSeqs[subjID][0], 1, send)
+          if send > sstart:
+            seq = getLTRseq(proviralSeqs[subjID][0], 1, send)
+            LTRdict[subjID]["5pEnd"] = send
+          else:
+            seq = getLTRseq(proviralSeqs[subjID][0], 1, sstart)
+            LTRdict[subjID]["5pEnd"] = send
+
           LTRdict[subjID]["5p"] = seq
           LTRdict[subjID]["5pStart"] = 1
-          LTRdict[subjID]["5pEnd"] = send
           LTRdict[subjID]["5pRevComp"] = seq.reverse_complement()
+
         elif slen - send < endBuffer:
-          seq = getLTRseq(proviralSeqs[subjID][0], sstart, slen)
+          if send > sstart:
+            seq = getLTRseq(proviralSeqs[subjID][0], sstart, slen)
+            LTRdict[subjID]["3pStart"] = sstart
+          
+          else:
+            seq = getLTRseq(proviralSeqs[subjID][0], send, slen)
+            LTRdict[subjID]["3pStart"] = send
+
           LTRdict[subjID]["3p"] = seq
-          LTRdict[subjID]["3pStart"] = sstart
           LTRdict[subjID]["3pEnd"] = slen          
           LTRdict[subjID]["3pRevComp"] = seq.reverse_complement()
 
