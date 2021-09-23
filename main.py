@@ -244,7 +244,7 @@ def isSoftClipProviral(read, proviralLTRSeqs, proviralSeqs, clipMinLen = 11, sof
         hostAdjacentSeq = clippedFragObj["adjacentFrag"][0:adjustment]
         
       if ltrEnd != "" and ltrEnd != hostAdjacentSeq:
-        print("{}: Viral clip not found at the end of LTR".format(read.query_name))
+        # print("{}: Viral clip not found at the end of LTR".format(read.query_name))
         continue
 
       # passes all checks!
@@ -582,7 +582,6 @@ def parseUnmappedReads(readPairs, proviralSeqs, proviralLTRSeqs, unmappedHostCli
     
     # can't have mulutiple soft clips present
     if hostReadSubs + viralReadSubs > 1:
-      #print("{}: Multiple soft clips in either/both reads, but still valid".format(hostRead.query_name))
       viralFrags.append(proviralFrag)
       continue
 
@@ -818,29 +817,6 @@ def main(args):
     unmappedViralReads=procUnmappedReads["viralFrags"]
   )
 
-  # printRed("validChimerasFromHostReads")
-  # for v in validChimerasFromHostReads:
-  #   printBlue(str(v['minus'][0]) if len(v['minus']) != 0 else str(v['plus'][0]))
-
-  # printRed("proviralValidChimeras[validReads]")
-  # for p in proviralProcessedReads["validReads"][0:10]:
-  #   printBlue(str(p.read1))
-  #   printBlue(str(p.read2))
-
-  # printRed("validIntegrationSites from proviral valid chimeras")
-  # for k in validChimerasFromViralReads:
-  #   print(str(validChimerasFromViralReads[k][0]))
-
-  # printRed("procUnmappedReads from viral unmapped")
-  # for k in procUnmappedReads["viralFrags"]:
-  #   print(str(k))
-
-  # printRed("unamppedValidIntegrationSites")
-  # if validChimerasFromUnmappedReads is not None:
-  #   for k in validChimerasFromUnmappedReads:
-  #     print(str(validChimerasFromUnmappedReads[k][0]))
-
-
   #############################
   # Export proc files
   #############################
@@ -849,21 +825,6 @@ def main(args):
   printGreen("Writing out compiled dataset")
   compiled.exportIntegrationSiteTSV(outputFNs["integrationSites"])
   compiled.exportProviralCoverageTSV(outputFNs["viralFrags"])
-
-  # cellrangerBam = pysam.AlignmentFile(args.bamfile, "rb")
-  # writeBam(args.outputDir + "/" + outputFNs["hostWithValidChimera"],
-  #   cellrangerBam,
-  #   hostValidChimeras["validReads"])
-
-  # writeBam(outputFNs["validProviralReads"],
-  #   cellrangerBam,
-  #   proviralProcessedReads["validReads"])
-
-  # writeBam(outputFNs["validProviralReadsWithPotentialChimera"],
-  #   cellrangerBam,
-  #   [x["read"] for x in proviralValidChimeras["potentialValidChimeras"]])
-  # cellrangerBam.close()
-
 
 if __name__ == '__main__':
   # set up command line arguments

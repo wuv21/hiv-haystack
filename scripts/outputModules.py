@@ -181,13 +181,24 @@ class CompiledDataset(object):
 
   def exportIntegrationSiteTSV(self, fn):
     output = [[x.proviralFragment.cbc] + x.intsite.returnAsList() for x in self.integrationSites]
+    outputPV = [x.proviralFragment for x in self.integrationSites]
 
+    # export integration sites
     with open(fn, "w") as tsvfile:
       writ = writer(tsvfile, delimiter = "\t")
 
       writ.writerow(["cbc", "chr", "orient", "pos"])
       for o in output:
         writ.writerow(o)
+    
+    # export proviral frags from integration sites
+    with open("intsite_proviralFrags.tsv", "w") as tsvfile:
+      writ = writer(tsvfile, delimiter = "\t")
+
+      writ.writerow(["cbc", "seqname", "startBp", "endBp", "usingAlt", "confirmedAlt"])
+      for o in outputPV:
+        writ.writerow(o)
+
 
   def exportProviralCoverageTSV(self, fn):
     with open(fn, "w") as tsvfile:
