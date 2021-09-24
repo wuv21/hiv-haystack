@@ -179,25 +179,25 @@ class CompiledDataset(object):
       self.collatedViralFrags.append(v.returnAsList())
 
 
-  def exportIntegrationSiteTSV(self, fn):
+  def exportIntegrationSiteTSV(self, fnIntSite, fnIntSiteFrag):
     output = [[x.proviralFragment.cbc] + x.intsite.returnAsList() for x in self.integrationSites]
-    outputPV = [x.proviralFragment for x in self.integrationSites]
+    outputPV = [x.proviralFragment.returnAsList() for x in self.integrationSites]
 
     # export integration sites
-    with open(fn, "w") as tsvfile:
-      writ = writer(tsvfile, delimiter = "\t")
+    with open(fnIntSite, "w") as tsvfile:
+      writ1 = writer(tsvfile, delimiter = "\t")
 
-      writ.writerow(["cbc", "chr", "orient", "pos"])
+      writ1.writerow(["cbc", "chr", "orient", "pos"])
       for o in output:
-        writ.writerow(o)
+        writ1.writerow(o)
     
     # export proviral frags from integration sites
-    with open("intsite_proviralFrags.tsv", "w") as tsvfile:
-      writ = writer(tsvfile, delimiter = "\t")
+    with open(fnIntSiteFrag, "w") as tsvfile2:
+      writ2 = writer(tsvfile2, delimiter = "\t")
 
-      writ.writerow(["cbc", "seqname", "startBp", "endBp", "usingAlt", "confirmedAlt"])
+      writ2.writerow(["cbc", "seqname", "startBp", "endBp", "usingAlt", "confirmedAlt"])
       for o in outputPV:
-        writ.writerow(o)
+        writ2.writerow(o)
 
 
   def exportProviralCoverageTSV(self, fn):

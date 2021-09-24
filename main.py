@@ -644,6 +644,14 @@ def parseCellrangerBam(bamfile, proviralFastaIds, proviralReads, hostReadsWithPo
   
   readIndex = 0
   for read in bam:
+    if readIndex % 10000000 == 0:
+      print("Parsing {}th read".format(str(readIndex)))
+
+    if top_n != -1 and readIndex > top_n:
+      return
+
+    readIndex += 1
+
     # ignore if optical/PCR duplicate OR without a mate
     if (read.flag & 1024) or (not read.flag & 1):
       readIndex += 1
@@ -676,13 +684,6 @@ def parseCellrangerBam(bamfile, proviralFastaIds, proviralReads, hostReadsWithPo
       # move to chimera identification
       unmappedPotentialChimera[read.query_name].append(read)
     
-    readIndex += 1
-    if readIndex % 10000000 == 0:
-      print("Parsed {} reads".format(str(readIndex)))
-
-    if top_n != -1 and readIndex > top_n:
-      return
-    
   return bam
 
 
@@ -698,6 +699,7 @@ def main(args):
     "viralReadHostClipFasta": "viralReadHostClipFasta.fa",
     "unmappedHostClipFasta": "unmappedHostClipFasta.fa",
     "integrationSites": "integrationSites.tsv",
+    "viralFragsFromIntegrationSites": "integrationSites_viralFrags.tsv",
     "viralFrags": "viralFrags.tsv"
   }
 
@@ -823,7 +825,7 @@ def main(args):
 
   # write out processed files
   printGreen("Writing out compiled dataset")
-  compiled.exportIntegrationSiteTSV(outputFNs["integrationSites"])
+  compiled.exportIntegrationSiteTSV(outputFNs["integrationSites"], outputFNs["viralFragsFromIntegrationSites"])
   compiled.exportProviralCoverageTSV(outputFNs["viralFrags"])
 
 if __name__ == '__main__':
