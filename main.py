@@ -286,7 +286,13 @@ def isSoftClipProviral(read, proviralLTRSeqs, proviralSeqs, clipMinLen = 11, sof
 
 def parseHostReadsWithPotentialChimera(readPairs, proviralLTRSeqs, proviralSeqs, clipMinLen):
   validChimeras = []
+  readPairLen = len(readPairs.keys())
+  readKeyCounter = 0
+
   for key in readPairs:
+    printProgressBar(readKeyCounter, readPairLen, "Processing Host Reads with Chimera")
+    readKeyCounter += 1
+
     # only allow one read mate to have soft clip
     if len(readPairs[key]) != 1:
       continue 
@@ -645,7 +651,7 @@ def parseCellrangerBam(bamfile, proviralFastaIds, proviralReads, hostReadsWithPo
   readIndex = 0
   for read in bam:
     if readIndex % 10000000 == 0:
-      print("Parsing {}th read".format(str(readIndex)))
+      print("Parsing {}th read".format(str(readIndex)), end = "\r")
 
     if top_n != -1 and readIndex > top_n:
       return
