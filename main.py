@@ -290,9 +290,9 @@ def parseHostReadsWithPotentialChimera(readPairs, proviralLTRSeqs, proviralSeqs,
   readKeyCounter = 0
 
   for key in readPairs:
-    if (readKeyCounter % 100000 == 0) {
+    if (readKeyCounter % 100000 == 0):
       printProgressBar(readKeyCounter, readPairLen, "Processing Host Reads with Chimera")
-    }
+      
     readKeyCounter += 1
 
     # only allow one read mate to have soft clip
