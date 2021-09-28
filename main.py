@@ -290,7 +290,9 @@ def parseHostReadsWithPotentialChimera(readPairs, proviralLTRSeqs, proviralSeqs,
   readKeyCounter = 0
 
   for key in readPairs:
-    printProgressBar(readKeyCounter, readPairLen, "Processing Host Reads with Chimera")
+    if (readKeyCounter % 100000 == 0) {
+      printProgressBar(readKeyCounter, readPairLen, "Processing Host Reads with Chimera")
+    }
     readKeyCounter += 1
 
     # only allow one read mate to have soft clip
@@ -650,7 +652,7 @@ def parseCellrangerBam(bamfile, proviralFastaIds, proviralReads, hostReadsWithPo
   
   readIndex = 0
   for read in bam:
-    if readIndex % 10000000 == 0:
+    if readIndex % 1000000 == 0:
       print("Parsing {}th read".format(str(readIndex)), end = "\r")
 
     if top_n != -1 and readIndex > top_n:
