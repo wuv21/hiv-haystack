@@ -211,7 +211,7 @@ class CompiledDataset(object):
     with open(fn, "w") as tsvfile:
       writ = writer(tsvfile, delimiter = "\t")
 
-      writ2.writerow(["cbc", "seqname", "startBp", "endBp",
+      writ.writerow(["cbc", "seqname", "startBp", "endBp",
       "readname", "usingAlt", "confirmedAlt", "recordedFromIntegration"])
       for o in self.collatedViralFrags:
         writ.writerow(o)
