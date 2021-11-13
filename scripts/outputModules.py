@@ -24,24 +24,31 @@ class ProviralFragment(object):
     self.startBp = 0 #0-based start pos
     self.endBp = 0 #0-based end pos (endBp is the actual end Bp as opposed to position + 1)
     self.cbc = ""
+    self.readname = ""
     self.usingAlt = None
     self.confirmedAlt = False
+    self.recordedFromIntegration = False
 
   def __str__(self):
     return "{} {}:{}-{}".format(self.cbc, self.seqname, self.startBp, self.endBp)
 
-  def setManually(self, seqname, startBp, endBp, cbc, usingAlt = None):
+  def setManually(self, seqname, startBp, endBp, cbc, readname, usingAlt = None):
     self.seqname = seqname
     self.startBp = startBp #0-based start pos
     self.endBp = endBp #0-based end pos (endBp is the actual end Bp as opposed to position + 1)
     self.cbc = cbc
     self.usingAlt = usingAlt
+    self.readname = readname
 
   def setFromRead(self, read):
     self.seqname = read.reference_name
     self.startBp = read.reference_start
     self.endBp = read.reference_end - 1
     self.cbc = extractCellBarcode(read)
+    self.readname = read.qname
+
+  def setIntegrationFlag(self, status):
+    self.recordedFromIntegration = status
 
   def setAlt(self, usingAlt):
     if usingAlt is None:
@@ -63,7 +70,8 @@ class ProviralFragment(object):
     self.confirmedAlt = True
 
   def returnAsList(self):
-    return [self.cbc, self.seqname, self.startBp, self.endBp, str(self.usingAlt), str(self.confirmedAlt)]
+    return [self.cbc, self.seqname, self.startBp, self.endBp,
+    self.readname, str(self.usingAlt), str(self.confirmedAlt), str(self.recordedFromIntegration)]
 
   
 class ChimericRead(object):
@@ -128,7 +136,6 @@ class CompiledDataset(object):
     super().__init__()
     self.integrationSites = []
     self.pairedViralFrags = []
-    # self.singleViralFrags = []
     self.collatedViralFrags = []
 
     if validChimerasFromViralReads is not None:
@@ -142,7 +149,6 @@ class CompiledDataset(object):
     for x in validChimerasFromHostReads:
       if len(x['minus']) != 0:
         self.integrationSites = self.integrationSites + x['minus']
-        # self.collatedViralFrags.append(c.proviralFragment) # this should already be added in the validViralReads
 
       elif len(x['plus']) != 0:
         self.integrationSites = self.integrationSites + x['plus']
@@ -195,7 +201,8 @@ class CompiledDataset(object):
     with open(fnIntSiteFrag, "w") as tsvfile2:
       writ2 = writer(tsvfile2, delimiter = "\t")
 
-      writ2.writerow(["cbc", "seqname", "startBp", "endBp", "usingAlt", "confirmedAlt"])
+      writ2.writerow(["cbc", "seqname", "startBp", "endBp",
+      "readname", "usingAlt", "confirmedAlt", "recordedFromIntegration"])
       for o in outputPV:
         writ2.writerow(o)
 
@@ -204,6 +211,7 @@ class CompiledDataset(object):
     with open(fn, "w") as tsvfile:
       writ = writer(tsvfile, delimiter = "\t")
 
-      writ.writerow(["cbc", "seqname", "startBp", "endBp", "usingAlt", "confirmedAlt"])
+      writ2.writerow(["cbc", "seqname", "startBp", "endBp",
+      "readname", "usingAlt", "confirmedAlt", "recordedFromIntegration"])
       for o in self.collatedViralFrags:
         writ.writerow(o)
