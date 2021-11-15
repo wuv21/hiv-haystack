@@ -144,7 +144,7 @@ class CompiledDataset(object):
         
         for c in keypair:
           self.integrationSites.append(c)
-          self.validViralReads[c.proviralFragment.readname].setIntegrationAnalysisFlag(True)
+          validViralReads[c.proviralFragment.readname].setIntegrationAnalysisFlag(True)
 
           # self.collatedViralFrags.append(c.proviralFragment.returnAsList())
 
