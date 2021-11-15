@@ -117,6 +117,13 @@ class ReadPairDualProviral(object):
       self.read2 = newProviralFrag
       self.read1.confirmedAltCase()
 
+  def setIntegrationAnalysisFlag(self, status):
+    if self.potentialEditRead == "read1":
+      self.read1.setIntegrationAnalysisFlag(status)
+
+    elif self.potentialEditRead == "read2":
+      self.read2.setIntegrationAnalysisFlag(status)
+
   def returnAsList(self):
     read1List = self.read1.returnAsList()
     read2List = self.read2.returnAsList()
