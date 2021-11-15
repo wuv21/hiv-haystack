@@ -271,7 +271,6 @@ def isSoftClipProviral(read, proviralLTRSeqs, proviralSeqs, clipMinLen = 11, sof
         readname = read.qname,
         usingAlt = None
       )
-      proviralFrag.setIntegrationFlag(True)
 
       chimera = ChimericRead(read = read, intsite = intsite, proviralFragment = proviralFrag)
       hits[orient].append(chimera)
@@ -448,7 +447,6 @@ def alignClipToHost(fafile, hostGenomeIndex, potentialChimeras, hostClipLen = 17
       cbc = extractCellBarcode(currentChimera["read"]),
       readname = currentChimera["read"].qname
     )
-    proviralFrag.setIntegrationFlag(True)
 
     if nonChimeras is not None:
       nonChimeras[rec.qname].updateWithConfirmedEdit(proviralFrag)

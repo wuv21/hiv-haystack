@@ -27,7 +27,7 @@ class ProviralFragment(object):
     self.readname = ""
     self.usingAlt = None
     self.confirmedAlt = False
-    self.recordedFromIntegration = False
+    self.alreadyRecordedInIntegration = False
 
   def __str__(self):
     return "{} {}:{}-{}".format(self.cbc, self.seqname, self.startBp, self.endBp)
@@ -47,8 +47,8 @@ class ProviralFragment(object):
     self.cbc = extractCellBarcode(read)
     self.readname = read.qname
 
-  def setIntegrationFlag(self, status):
-    self.recordedFromIntegration = status
+  def setIntegrationAnalysisFlag(self, status):
+    self.alreadyRecordedInIntegration = status
 
   def setAlt(self, usingAlt):
     if usingAlt is None:
@@ -71,7 +71,7 @@ class ProviralFragment(object):
 
   def returnAsList(self):
     return [self.cbc, self.seqname, self.startBp, self.endBp,
-    self.readname, str(self.usingAlt), str(self.confirmedAlt), str(self.recordedFromIntegration)]
+    self.readname, str(self.usingAlt), str(self.confirmedAlt), str(self.alreadyRecordedInIntegration)]
 
   
 class ChimericRead(object):
@@ -144,7 +144,9 @@ class CompiledDataset(object):
         
         for c in keypair:
           self.integrationSites.append(c)
-          self.collatedViralFrags.append(c.proviralFragment.returnAsList())
+          self.validViralReads[c.proviralFragment.readname].setIntegrationAnalysisFlag(True)
+
+          # self.collatedViralFrags.append(c.proviralFragment.returnAsList())
 
     for x in validChimerasFromHostReads:
       if len(x['minus']) != 0:
@@ -165,11 +167,13 @@ class CompiledDataset(object):
 
         self.collatedViralFrags.append(x['plus'][0].proviralFragment.returnAsList())
     
+    unmappedValidChimeraReadNames = []
     if validChimerasFromUnmappedReadsViral is not None:
       for key in validChimerasFromUnmappedReadsViral:
         alignedSites = validChimerasFromUnmappedReadsViral[key]
         for i in alignedSites:
           self.integrationSites.append(i)
+          unmappedValidChimeraReadNames.append(i.proviralFragment.readname)
 
     # parse through paired viral reads
     for v in validViralReads:
@@ -182,6 +186,9 @@ class CompiledDataset(object):
 
     # parse through unampped viral reads
     for v in unmappedViralReads:
+      if v.readname in unmappedValidChimeraReadNames:
+        v.setIntegrationAnalysisFlag(True)
+      
       self.collatedViralFrags.append(v.returnAsList())
 
 
@@ -202,9 +209,9 @@ class CompiledDataset(object):
       writ2 = writer(tsvfile2, delimiter = "\t")
 
       writ2.writerow(["cbc", "seqname", "startBp", "endBp",
-      "readname", "usingAlt", "confirmedAlt", "recordedFromIntegration"])
+      "readname", "usingAlt", "confirmedAlt"])
       for o in outputPV:
-        writ2.writerow(o)
+        writ2.writerow(o[:-1])
 
 
   def exportProviralCoverageTSV(self, fn):
@@ -212,6 +219,6 @@ class CompiledDataset(object):
       writ = writer(tsvfile, delimiter = "\t")
 
       writ.writerow(["cbc", "seqname", "startBp", "endBp",
-      "readname", "usingAlt", "confirmedAlt", "recordedFromIntegration"])
+      "readname", "usingAlt", "confirmedAlt", "alreadyRecordedInIntegration"])
       for o in self.collatedViralFrags:
         writ.writerow(o)
