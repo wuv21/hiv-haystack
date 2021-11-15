@@ -167,12 +167,18 @@ class CompiledDataset(object):
         self.integrationSites = self.integrationSites + x['minus']
         
         # TODO need to fix for multiple hits...
-        self.collatedViralFrags.append(x['minus'][0].proviralFragment.returnAsList())
+        v = x['minus'][0].proviralFragment
+        v.setIntegrationAnalysisFlag(True)
+
+        self.collatedViralFrags.append(v.returnAsList())
 
       elif len(x['plus']) != 0:
         self.integrationSites = self.integrationSites + x['plus']
 
-        self.collatedViralFrags.append(x['plus'][0].proviralFragment.returnAsList())
+        v = x['plus'][0].proviralFragment
+        v.setIntegrationAnalysisFlag(True)
+
+        self.collatedViralFrags.append(v.returnAsList())
     
     unmappedValidChimeraReadNames = []
     if validChimerasFromUnmappedReadsViral is not None:
