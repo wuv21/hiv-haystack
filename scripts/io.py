@@ -36,20 +36,40 @@ def importProcessedBam(bamfile, returnDict = True):
 
 def writeFasta(chimeras, fastafn):
   records = []
-  for qnameKey in chimeras:
-    chimera = chimeras[qnameKey]
-    if chimera["adjustedHostSoftClip"] is not None:
-      seq = Seq(chimera["adjustedHostSoftClip"])
-    else:
-      seq = Seq(chimera["hostSoftClip"]["clippedFrag"])
-    
-    record = SeqRecord(
-      id = chimera["read"].qname,
-      seq = seq,
-      description = ""
-    )
 
-    records.append(record)
+  if type(chimeras) is dict:
+    for qnameKey in chimeras:
+      chimera = chimeras[qnameKey]
+      if chimera["adjustedHostSoftClip"] is not None:
+        seq = Seq(chimera["adjustedHostSoftClip"])
+      else:
+        seq = Seq(chimera["hostSoftClip"]["clippedFrag"])
+      
+      record = SeqRecord(
+        id = chimera["read"].qname,
+        seq = seq,
+        description = ""
+      )
+
+      records.append(record)
+
+  elif type(chimeras) is list:
+    for chimera in chimeras:
+      if chimera["adjustedHostSoftClip"] is not None:
+        seq = Seq(chimera["adjustedHostSoftClip"])
+      else:
+        seq = Seq(chimera["hostSoftClip"]["clippedFrag"])
+      
+      record = SeqRecord(
+        id = chimera["read"].qname,
+        seq = seq,
+        description = ""
+      )
+
+      records.append(record)
+
+  else:
+    raise Exception("Chimeras is not in a list or dict format")
 
   if len(records) != 0:
     SeqIO.write(records, fastafn, "fasta")

@@ -152,7 +152,7 @@ def getSoftClip(read, clipMinLen, softClipPad, useAlt = None):
     return None
   else:
     if clip5Present:
-      adjacentPos = read.reference_start + len(clippedFrag)
+      adjacentPos = read.reference_start
     else:
       adjacentPos = read.reference_start + (len(read.query_sequence) - len(clippedFrag) - 1)
 
@@ -261,7 +261,7 @@ def isSoftClipProviral(read, proviralLTRSeqs, proviralSeqs, clipMinLen = 11, sof
         chr = read.reference_name,
         orient = "-" if orient == "minus" else "+",
         pos = clippedFragObj["adjacentPosToClip"] + adjustment)
-
+      
       proviralFrag = ProviralFragment()
       proviralFrag.setManually(
         seqname = key,
@@ -789,7 +789,7 @@ def main(args):
     proviralSeqs = proviralSeqs,
     hostClipFastaFn = outputFNs["viralReadHostClipFasta"],
     clipMinLen = args.hostClipLen)
-    
+  
   printCyanOnGrey("Found {} potential valid chimera(s)".format(len(proviralProcessedReads["potentialValidChimeras"].keys())))
 
   printGreen("Aligning host clips found on viruses to host genome")
