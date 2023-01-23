@@ -567,7 +567,7 @@ def parseUnmappedReads(readPairs, proviralSeqs, proviralLTRSeqs, unmappedHostCli
 
   viralFrags = []
   validChimera = []
-  potentialChimera = []
+  potentialChimera = defaultdict()
 
   for k in readPairs:
     readPair = readPairs[k]
@@ -629,14 +629,16 @@ def parseUnmappedReads(readPairs, proviralSeqs, proviralLTRSeqs, unmappedHostCli
         clipMinLen = hostClipMinLen, useAlts = None)
 
       if viralSoftClip is not None:
-        print("{}: Valid soft clip detected in virus. Proceed further".format(viralRead.query_name))
+        print("{}: Valid soft clip detected in virus. Proceed further.".format(viralRead.query_name))
         print(viralRead.to_string())
-        potentialChimera.append(viralSoftClip)
+        
+        proviralFrag.setPotentialClipEdit(viralRead.query_name, viralSoftClip, isAlt = False)
+        potentialChimera[viralRead.query_name] = viralSoftClip
       elif viralSoftClipAlt is not None:
-        print("{}: Valid alternate soft clip detected in virus. Proceed further".format(viralRead.query_name))
+        print("{}: Valid alternate soft clip detected in virus. Proceed further.".format(viralRead.query_name))
         print(viralRead.to_string())
-        proviralFrag.setPotentialClipEdit(viralRead.query_name, potentialChimera, isAlt = False)
-        potentialChimera.append(viralSoftClipAlt)
+        proviralFrag.setPotentialClipEdit(viralRead.query_name, viralSoftClipAlt, isAlt = True)
+        potentialChimera[viralRead.query_name] = viralSoftClipAlt
 
     else:
       viralFrags.append(proviralFrag)

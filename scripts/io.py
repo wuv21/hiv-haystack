@@ -37,7 +37,7 @@ def importProcessedBam(bamfile, returnDict = True):
 def writeFasta(chimeras, fastafn):
   records = []
 
-  if type(chimeras) is dict:
+  if type(chimeras) is dict or isinstance(chimeras, defaultdict):
     for qnameKey in chimeras:
       chimera = chimeras[qnameKey]
       if chimera["adjustedHostSoftClip"] is not None:
