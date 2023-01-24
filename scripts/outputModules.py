@@ -29,8 +29,31 @@ class ProviralFragment(object):
     self.confirmedAlt = False
     self.alreadyRecordedInIntegration = False
 
+    self.potentialEditRead = ""
+    self.potentialEditData = None
+    self.potentialEditIsAlt = False
+
   def __str__(self):
     return "{} {}:{}-{}".format(self.cbc, self.seqname, self.startBp, self.endBp)
+
+  def setPotentialClipEdit(self, readNum, readData, isAlt):
+    self.potentialEditRead = readNum
+    self.potentialEditData = readData
+    self.potentialEditIsAlt = isAlt
+
+  def unsetPotentialClipEdit(self):
+    self.potentialEditRead = ""
+    self.potentialEditData = None
+    self.potentialEditIsAlt = False
+
+  def updateWithConfirmedEdit(self, newProviralFrag):
+    if self.potentialEditRead == "read1":
+      self.read1 = newProviralFrag
+      self.read2.confirmedAltCase()
+
+    elif self.potentialEditRead == "read2":
+      self.read2 = newProviralFrag
+      self.read1.confirmedAltCase()
 
   def setManually(self, seqname, startBp, endBp, cbc, readname, usingAlt = None):
     self.seqname = seqname
