@@ -814,7 +814,7 @@ def main(args):
 
   validChimerasFromUnmappedReads = alignClipToHost(fafile = outputFNs["unmappedHostClipFasta"],
     hostGenomeIndex = args.hostGenomeIndex,
-    potentialChimeras = procUnmappedReads["validChimera"],
+    potentialChimeras = procUnmappedReads["potentialChimera"],
     hostClipLen = args.hostClipLen)
 
   #############################
