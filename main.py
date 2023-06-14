@@ -253,14 +253,19 @@ def isSoftClipProviral(read, proviralLTRSeqs, proviralSeqs, clipMinLen = 11, sof
       if ltrType == "5p" or ltrType == "5pRevComp":
         proviralStartPos = 0
         proviralEndPos = len(clippedFragObj["clippedFrag"]) + abs(adjustment) - 1
+        
+        intsitePos = clippedFragObj["adjacentPosToClip"] + adjustment - 4 # correct for 5bp duplication
+
       elif ltrType == "3p" or ltrType == "3pRevComp":
         proviralStartPos = len(proviralSeqs[key][0]) - len(clippedFragObj["clippedFrag"]) - abs(adjustment)
         proviralEndPos = len(proviralSeqs[key][0]) - 1
+        
+        intsitePos = clippedFragObj["adjacentPosToClip"] + adjustment
 
       intsite = IntegrationSite(
         chr = read.reference_name,
         orient = "-" if orient == "minus" else "+",
-        pos = clippedFragObj["adjacentPosToClip"] + adjustment)
+        pos = intsitePos)
       
       proviralFrag = ProviralFragment()
       proviralFrag.setManually(
@@ -426,19 +431,31 @@ def alignClipToHost(fafile, hostGenomeIndex, potentialChimeras, hostClipLen = 17
     # check orientation of alignment
     currentChimera = potentialChimeras[rec.qname]
     if currentChimera["adjustment"] != 0:
+      print(currentChimera)
+      print(rec.seq)
+      
       if str(currentChimera["adjustedHostSoftClip"]) != str(rec.seq):
         orient = "-"
       else:
         orient = "+"
     else:
-      if str(currentChimera["hostSoftClip"]["clippedFrag"] != str(rec.seq)):
+      if str(currentChimera["hostSoftClip"]["clippedFrag"]) != str(rec.seq):
         orient = "-"
       else:
         orient = "+"
+    
+    # if host soft clip is on the 5' end...then take the reported position + length of match and set
+    # as location of integration site
+
+    # if it's 5' end, needs to be subtracted by 5 because of 5bp duplication for HIV. 3' end is ok as is.
+    if currentChimera["read"].cigartuples[0][0] == 4: # this matches for "BAM_CSOFT_CLIP" which is a S
+      integrationSiteCoord = rec.reference_start + rec.query_alignment_length - 5
+    else:
+      integrationSiteCoord = rec.reference_start
 
     # TODO edit dualproviralobject if 1) edit is used, just change read and 2) if alt is used, change both
 
-    intsite = IntegrationSite(rec.reference_name, orient, rec.reference_start)
+    intsite = IntegrationSite(rec.reference_name, orient, integrationSiteCoord)
     proviralFrag = ProviralFragment()
     proviralFrag.setManually(
       seqname = currentChimera["read"].reference_name,
