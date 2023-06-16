@@ -595,6 +595,11 @@ def parseUnmappedReads(readPairs, proviralSeqs, proviralLTRSeqs, unmappedHostCli
       viralRead = readPair[1]
       hostRead = readPair[0]
 
+    # must contain valid cell barcode passing allowlist
+    if extractCellBarcode(viralRead) is None:
+     continue
+
+
     # host read must have high enough mapq
     # for viral read, no check since mapq is unrealiable if using multiple viral seqs
     if hostRead.mapq < minHostQuality:
